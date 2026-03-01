@@ -505,6 +505,22 @@ export default function Home() {
               </p>
             </div>
             <div className="flex items-center gap-3 flex-wrap">
+              {/* Export Excel - always visible in header */}
+              <button
+                onClick={handleExportExcel}
+                className="bg-teal-600 hover:bg-teal-700 text-white px-3 py-1.5 rounded-lg text-xs font-semibold transition flex items-center gap-1"
+              >
+                📊 Excel
+              </button>
+              {/* Upload button - admin only in header */}
+              {isAdmin && (
+                <button
+                  onClick={() => { setShowUploadModal(true); setUploadError(""); }}
+                  className="bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-1.5 rounded-lg text-xs font-semibold transition flex items-center gap-1"
+                >
+                  📂 Upload
+                </button>
+              )}
               {/* Login status */}
               {loginStatus ? (
                 <div className="flex items-center gap-2">
