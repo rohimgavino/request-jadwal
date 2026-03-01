@@ -19,6 +19,10 @@ The template is a clean Next.js 16 starter with TypeScript and Tailwind CSS 4. I
 - [x] Changed lock logic to per-day max 5 libur (not per-employee)
 - [x] Schedule data isolated per month (YYYY-MM key) — navigating months doesn't share data
 - [x] Added CSV upload feature for employee names with downloadable template
+- [x] Added NIK column to employee data structure (Employee type: nik, name, password)
+- [x] Updated CSV upload to support NIK,Nama Karyawan two-column format
+- [x] Added per-NIK login popup modal with password authentication (default password = NIK)
+- [x] Updated add employee form to include NIK and password fields
 
 ## Current Structure
 
