@@ -27,6 +27,7 @@ The template is a clean Next.js 16 starter with TypeScript and Tailwind CSS 4. I
 - [x] Restricted per-NIK login to only edit their own row
 - [x] Added C+L combined per-day lock (max 6 people with C or L on same day)
 - [x] Added Export to Excel feature using xlsx library (downloads .xlsx file)
+- [x] Fixed missing Upload/Export buttons by adding them to header for better visibility
 
 ## Current Structure
 
