@@ -23,6 +23,10 @@ The template is a clean Next.js 16 starter with TypeScript and Tailwind CSS 4. I
 - [x] Updated CSV upload to support NIK,Nama Karyawan two-column format
 - [x] Added per-NIK login popup modal with password authentication (default password = NIK)
 - [x] Updated add employee form to include NIK and password fields
+- [x] Added admin special user (NIK=ADMIN, password=admin123) that can edit all rows, add/remove employees, upload CSV
+- [x] Restricted per-NIK login to only edit their own row
+- [x] Added C+L combined per-day lock (max 6 people with C or L on same day)
+- [x] Added Export to Excel feature using xlsx library (downloads .xlsx file)
 
 ## Current Structure
 
