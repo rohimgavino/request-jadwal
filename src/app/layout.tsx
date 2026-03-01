@@ -13,8 +13,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Next.js Template",
-  description: "A minimal Next.js starter template",
+  title: "Jadwal Kerja Karyawan",
+  description: "Aplikasi input jadwal kerja karyawan dengan fitur kunci libur maksimal",
 };
 
 export default function RootLayout({
