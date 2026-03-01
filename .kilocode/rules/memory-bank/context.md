@@ -15,6 +15,10 @@ The template is a clean Next.js 16 starter with TypeScript and Tailwind CSS 4. I
 - [x] Memory bank documentation
 - [x] Recipe system for common features
 - [x] Built schedule input app (Jadwal Kerja Karyawan) with lock feature when libur (L) > 5
+- [x] Updated shift types: P (06:00), P0 (07:00), S (14:00), M (22:00), L (Libur), C (Cuti)
+- [x] Changed lock logic to per-day max 5 libur (not per-employee)
+- [x] Schedule data isolated per month (YYYY-MM key) — navigating months doesn't share data
+- [x] Added CSV upload feature for employee names with downloadable template
 
 ## Current Structure
 
