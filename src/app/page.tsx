@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useRef, useMemo } from "react";
 
 // Shift definitions
 const SHIFT_OPTIONS = ["P", "P0", "S", "M", "L", "C", ""];
@@ -54,21 +54,38 @@ function isWeekend(year: number, month: number, day: number) {
   return dow === 0 || dow === 6;
 }
 
-type ScheduleData = Record<string, Record<number, string>>;
+// Schedule data keyed by "YYYY-MM" then employee name then day
+type MonthSchedule = Record<string, Record<number, string>>;
+type AllScheduleData = Record<string, MonthSchedule>;
+
+function getMonthKey(year: number, month: number) {
+  return `${year}-${String(month + 1).padStart(2, "0")}`;
+}
 
 export default function Home() {
   const now = new Date();
   const [year, setYear] = useState(now.getFullYear());
   const [month, setMonth] = useState(now.getMonth());
   const [employees, setEmployees] = useState<string[]>(INITIAL_EMPLOYEES);
-  const [schedule, setSchedule] = useState<ScheduleData>({});
+  // All schedule data across months
+  const [allSchedule, setAllSchedule] = useState<AllScheduleData>({});
   const [newEmployee, setNewEmployee] = useState("");
   const [showAddEmployee, setShowAddEmployee] = useState(false);
+  const [uploadError, setUploadError] = useState("");
+  const [showUploadModal, setShowUploadModal] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const monthKey = getMonthKey(year, month);
+  // Current month's schedule (memoized to avoid new object reference each render)
+  const schedule: MonthSchedule = useMemo(
+    () => allSchedule[monthKey] || {},
+    [allSchedule, monthKey]
+  );
 
   const daysInMonth = getDaysInMonth(year, month);
   const days = Array.from({ length: daysInMonth }, (_, i) => i + 1);
 
-  // Count how many employees have "L" on a given day
+  // Count how many employees have "L" on a given day (current month only)
   const getLiburCountForDay = useCallback(
     (day: number) => {
       return employees.filter((emp) => schedule[emp]?.[day] === "L").length;
@@ -77,11 +94,10 @@ export default function Home() {
   );
 
   // A cell is locked for "L" if the day already has MAX_LIBUR_PER_DAY employees with L
-  // and this employee doesn't already have L on that day
   const isDayLockedForLibur = useCallback(
     (employee: string, day: number) => {
       const currentVal = schedule[employee]?.[day] || "";
-      if (currentVal === "L") return false; // already L, not locked
+      if (currentVal === "L") return false;
       return getLiburCountForDay(day) >= MAX_LIBUR_PER_DAY;
     },
     [schedule, getLiburCountForDay]
@@ -106,15 +122,18 @@ export default function Home() {
         attempts++;
       }
 
-      setSchedule((prev) => ({
+      setAllSchedule((prev) => ({
         ...prev,
-        [employee]: {
-          ...(prev[employee] || {}),
-          [day]: SHIFT_OPTIONS[nextIndex],
+        [monthKey]: {
+          ...(prev[monthKey] || {}),
+          [employee]: {
+            ...((prev[monthKey] || {})[employee] || {}),
+            [day]: SHIFT_OPTIONS[nextIndex],
+          },
         },
       }));
     },
-    [schedule, getLiburCountForDay]
+    [schedule, getLiburCountForDay, monthKey]
   );
 
   const handleAddEmployee = () => {
@@ -128,9 +147,15 @@ export default function Home() {
 
   const handleRemoveEmployee = (emp: string) => {
     setEmployees((prev) => prev.filter((e) => e !== emp));
-    setSchedule((prev) => {
+    setAllSchedule((prev) => {
       const next = { ...prev };
-      delete next[emp];
+      // Remove employee from all months
+      Object.keys(next).forEach((key) => {
+        if (next[key][emp]) {
+          next[key] = { ...next[key] };
+          delete next[key][emp];
+        }
+      });
       return next;
     });
   };
@@ -168,6 +193,63 @@ export default function Home() {
       if (val && counts[val] !== undefined) counts[val]++;
     });
     return counts;
+  };
+
+  // Download CSV template
+  const handleDownloadTemplate = () => {
+    const csvContent = "Nama Karyawan\nAhmad Fauzi\nBudi Santoso\nCitra Dewi\n";
+    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = "template_karyawan.csv";
+    link.click();
+    URL.revokeObjectURL(url);
+  };
+
+  // Handle CSV upload
+  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setUploadError("");
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (!file.name.endsWith(".csv") && !file.name.endsWith(".txt")) {
+      setUploadError("File harus berformat .csv atau .txt");
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const text = event.target?.result as string;
+      const lines = text
+        .split(/\r?\n/)
+        .map((l) => l.trim())
+        .filter((l) => l.length > 0);
+
+      // Skip header row if it matches "Nama Karyawan" (case-insensitive)
+      const dataLines = lines[0]?.toLowerCase() === "nama karyawan" ? lines.slice(1) : lines;
+
+      if (dataLines.length === 0) {
+        setUploadError("File tidak memiliki data nama karyawan.");
+        return;
+      }
+
+      const newNames = dataLines.filter((name) => name.length > 0);
+      if (newNames.length === 0) {
+        setUploadError("Tidak ada nama karyawan yang valid ditemukan.");
+        return;
+      }
+
+      setEmployees(newNames);
+      setShowUploadModal(false);
+      setUploadError("");
+      // Reset file input
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    };
+    reader.onerror = () => {
+      setUploadError("Gagal membaca file. Coba lagi.");
+    };
+    reader.readAsText(file);
   };
 
   return (
@@ -297,33 +379,21 @@ export default function Home() {
                             weekend ? "bg-orange-50" : ""
                           }`}
                         >
-                          {lockedForLibur && val !== "L" ? (
-                            // Show lock only on empty cells when day is full for L
-                            // But still allow non-L shifts
-                            <button
-                              onClick={() => handleCellClick(emp, day)}
-                              className={`w-9 h-9 mx-auto rounded-lg flex items-center justify-center font-bold text-xs transition-all hover:scale-110 hover:shadow-md cursor-pointer ${
-                                val
-                                  ? SHIFT_COLORS[val]
-                                  : "bg-gray-100 text-gray-400 hover:bg-gray-200"
-                              }`}
-                              title={`${emp} - ${day}: ${SHIFT_LABELS[val] || "Kosong"} (L terkunci: sudah ${MAX_LIBUR_PER_DAY} orang libur)`}
-                            >
-                              {val || "·"}
-                            </button>
-                          ) : (
-                            <button
-                              onClick={() => handleCellClick(emp, day)}
-                              className={`w-9 h-9 mx-auto rounded-lg flex items-center justify-center font-bold text-xs transition-all hover:scale-110 hover:shadow-md cursor-pointer ${
-                                val
-                                  ? SHIFT_COLORS[val]
-                                  : "bg-gray-100 text-gray-400 hover:bg-gray-200"
-                              }`}
-                              title={`${emp} - ${day}: ${SHIFT_LABELS[val] || "Kosong"} (klik untuk ubah)`}
-                            >
-                              {val || "·"}
-                            </button>
-                          )}
+                          <button
+                            onClick={() => handleCellClick(emp, day)}
+                            className={`w-9 h-9 mx-auto rounded-lg flex items-center justify-center font-bold text-xs transition-all hover:scale-110 hover:shadow-md cursor-pointer ${
+                              val
+                                ? SHIFT_COLORS[val]
+                                : "bg-gray-100 text-gray-400 hover:bg-gray-200"
+                            }`}
+                            title={
+                              lockedForLibur && !val
+                                ? `${emp} - ${day}: Kosong (L terkunci: sudah ${MAX_LIBUR_PER_DAY} orang libur)`
+                                : `${emp} - ${day}: ${SHIFT_LABELS[val] || "Kosong"} (klik untuk ubah)`
+                            }
+                          >
+                            {val || "·"}
+                          </button>
                         </td>
                       );
                     })}
@@ -437,7 +507,7 @@ export default function Home() {
           </table>
         </div>
 
-        {/* Add Employee */}
+        {/* Action buttons row */}
         <div className="mt-4 flex items-center gap-3 flex-wrap">
           {showAddEmployee ? (
             <div className="flex items-center gap-2">
@@ -471,6 +541,15 @@ export default function Home() {
               ➕ Tambah Karyawan
             </button>
           )}
+
+          {/* Upload button */}
+          <button
+            onClick={() => { setShowUploadModal(true); setUploadError(""); }}
+            className="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-lg text-sm font-semibold transition flex items-center gap-2"
+          >
+            📂 Upload Daftar Karyawan
+          </button>
+
           <div className="ml-auto text-sm text-gray-500">
             Total karyawan:{" "}
             <span className="font-semibold text-gray-700">{employees.length}</span>
@@ -490,6 +569,9 @@ export default function Home() {
               pilihan L akan dilewati otomatis 🔒
             </li>
             <li>
+              Data jadwal <strong>terpisah per bulan</strong> — pindah bulan tidak akan mengubah jadwal bulan lain
+            </li>
+            <li>
               <strong>P</strong> = Pagi 06:00 &nbsp;|&nbsp;
               <strong>P0</strong> = Pagi 07:00 &nbsp;|&nbsp;
               <strong>S</strong> = Siang 14:00 &nbsp;|&nbsp;
@@ -501,6 +583,76 @@ export default function Home() {
           </ul>
         </div>
       </div>
+
+      {/* Upload Modal */}
+      {showUploadModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-lg font-bold text-gray-800">📂 Upload Daftar Karyawan</h2>
+              <button
+                onClick={() => { setShowUploadModal(false); setUploadError(""); }}
+                className="text-gray-400 hover:text-gray-600 text-2xl leading-none"
+              >
+                ×
+              </button>
+            </div>
+
+            {/* Template download */}
+            <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 mb-4">
+              <p className="text-sm text-blue-800 font-semibold mb-1">📋 Format Template CSV</p>
+              <p className="text-xs text-blue-700 mb-3">
+                File CSV dengan satu kolom <strong>Nama Karyawan</strong>, satu nama per baris.
+              </p>
+              <div className="bg-white border border-blue-200 rounded-lg p-3 font-mono text-xs text-gray-700 mb-3">
+                <div className="text-blue-600 font-bold">Nama Karyawan</div>
+                <div>Ahmad Fauzi</div>
+                <div>Budi Santoso</div>
+                <div>Citra Dewi</div>
+                <div className="text-gray-400">... (tambah nama lainnya)</div>
+              </div>
+              <button
+                onClick={handleDownloadTemplate}
+                className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-semibold transition w-full flex items-center justify-center gap-2"
+              >
+                ⬇️ Download Template CSV
+              </button>
+            </div>
+
+            {/* File upload */}
+            <div className="mb-4">
+              <label className="block text-sm font-semibold text-gray-700 mb-2">
+                Upload File CSV:
+              </label>
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept=".csv,.txt"
+                onChange={handleFileUpload}
+                className="block w-full text-sm text-gray-600 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-emerald-50 file:text-emerald-700 hover:file:bg-emerald-100 border border-gray-300 rounded-lg p-1 cursor-pointer"
+              />
+              <p className="text-xs text-gray-500 mt-1">Format: .csv atau .txt</p>
+            </div>
+
+            {uploadError && (
+              <div className="bg-red-50 border border-red-200 rounded-lg p-3 mb-4 text-sm text-red-700">
+                ⚠️ {uploadError}
+              </div>
+            )}
+
+            <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 text-xs text-amber-700">
+              ⚠️ <strong>Perhatian:</strong> Upload akan <strong>mengganti</strong> seluruh daftar karyawan yang ada saat ini. Data jadwal yang sudah diisi akan tetap tersimpan.
+            </div>
+
+            <button
+              onClick={() => { setShowUploadModal(false); setUploadError(""); }}
+              className="mt-4 w-full bg-gray-200 hover:bg-gray-300 text-gray-700 px-4 py-2 rounded-lg text-sm font-semibold transition"
+            >
+              Tutup
+            </button>
+          </div>
+        </div>
+      )}
     </main>
   );
 }
