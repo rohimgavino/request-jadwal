@@ -135,6 +135,16 @@ export default function Home() {
     error: string;
   }>({ open: false, inputPassword: "", error: "" });
 
+  // Password change modal state
+  const [passwordChangeModal, setPasswordChangeModal] = useState<{
+    open: boolean;
+    currentPassword: string;
+    newPassword: string;
+    confirmPassword: string;
+    error: string;
+    success: string;
+  }>({ open: false, currentPassword: "", newPassword: "", confirmPassword: "", error: "", success: "" });
+
   const isAdmin = loggedInAs === ADMIN_NIK;
 
   const monthKey = getMonthKey(year, month);
@@ -426,6 +436,43 @@ export default function Home() {
   // Logout
   const handleLogout = () => setLoggedInAs(null);
 
+  // Handle password change
+  const handlePasswordChange = () => {
+    setPasswordChangeModal((prev) => ({ ...prev, error: "", success: "" }));
+    
+    if (!loggedInAs || isAdmin) return;
+    
+    const emp = employees.find((e) => e.nik === loggedInAs);
+    if (!emp) return;
+    
+    const { currentPassword, newPassword, confirmPassword } = passwordChangeModal;
+    
+    if (currentPassword !== emp.password) {
+      setPasswordChangeModal((prev) => ({ ...prev, error: "Password saat ini salah." }));
+      return;
+    }
+    
+    if (!newPassword || newPassword.length < 1) {
+      setPasswordChangeModal((prev) => ({ ...prev, error: "Password baru tidak boleh kosong." }));
+      return;
+    }
+    
+    if (newPassword !== confirmPassword) {
+      setPasswordChangeModal((prev) => ({ ...prev, error: "Konfirmasi password tidak cocok." }));
+      return;
+    }
+    
+    setEmployees((prev) =>
+      prev.map((e) => (e.nik === loggedInAs ? { ...e, password: newPassword } : e))
+    );
+    
+    setPasswordChangeModal((prev) => ({ ...prev, success: "Password berhasil diubah!", currentPassword: "", newPassword: "", confirmPassword: "" }));
+    
+    setTimeout(() => {
+      setPasswordChangeModal((prev) => ({ ...prev, open: false, success: "" }));
+    }, 1500);
+  };
+
   // Export to Excel
   const handleExportExcel = () => {
     const wb = XLSX.utils.book_new();
@@ -679,13 +726,22 @@ export default function Home() {
                         </div>
                         {/* Login/logout button per row */}
                         {isMyRow ? (
-                          <button
-                            onClick={handleLogout}
-                            className="ml-auto text-[10px] bg-green-100 text-green-700 border border-green-300 rounded px-1.5 py-0.5 hover:bg-green-200 transition flex-shrink-0"
-                            title="Klik untuk logout"
-                          >
-                            🔓
-                          </button>
+                          <div className="ml-auto flex items-center gap-1">
+                            <button
+                              onClick={() => setPasswordChangeModal({ open: true, currentPassword: "", newPassword: "", confirmPassword: "", error: "", success: "" })}
+                              className="text-[10px] bg-blue-100 text-blue-700 border border-blue-300 rounded px-1.5 py-0.5 hover:bg-blue-200 transition flex-shrink-0"
+                              title="Ubah password"
+                            >
+                              🔐
+                            </button>
+                            <button
+                              onClick={handleLogout}
+                              className="text-[10px] bg-green-100 text-green-700 border border-green-300 rounded px-1.5 py-0.5 hover:bg-green-200 transition flex-shrink-0"
+                              title="Klik untuk logout"
+                            >
+                              🔓
+                            </button>
+                          </div>
                         ) : loggedInAs === null ? (
                           <button
                             onClick={() => openLoginModal(emp)}
@@ -1145,6 +1201,91 @@ export default function Home() {
               </button>
               <button
                 onClick={() => setAdminLoginModal({ open: false, inputPassword: "", error: "" })}
+                className="bg-gray-200 hover:bg-gray-300 text-gray-700 px-4 py-2 rounded-lg text-sm font-semibold transition"
+              >
+                Batal
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Password Change Modal */}
+      {passwordChangeModal.open && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm p-6">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-lg font-bold text-gray-800">🔐 Ubah Password</h2>
+              <button
+                onClick={() => setPasswordChangeModal({ open: false, currentPassword: "", newPassword: "", confirmPassword: "", error: "", success: "" })}
+                className="text-gray-400 hover:text-gray-600 text-2xl leading-none"
+              >
+                ×
+              </button>
+            </div>
+
+            <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 mb-4">
+              <p className="text-sm text-blue-800">
+                Anda sedang mengubah password untuk akun <strong>{loggedInAs}</strong>
+              </p>
+            </div>
+
+            <div className="mb-3">
+              <label className="block text-sm font-semibold text-gray-700 mb-2">Password Saat Ini:</label>
+              <input
+                type="password"
+                value={passwordChangeModal.currentPassword}
+                onChange={(e) => setPasswordChangeModal((prev) => ({ ...prev, currentPassword: e.target.value, error: "", success: "" }))}
+                placeholder="Masukkan password saat ini..."
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400"
+                autoFocus
+              />
+            </div>
+
+            <div className="mb-3">
+              <label className="block text-sm font-semibold text-gray-700 mb-2">Password Baru:</label>
+              <input
+                type="password"
+                value={passwordChangeModal.newPassword}
+                onChange={(e) => setPasswordChangeModal((prev) => ({ ...prev, newPassword: e.target.value, error: "", success: "" }))}
+                placeholder="Masukkan password baru..."
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400"
+              />
+            </div>
+
+            <div className="mb-4">
+              <label className="block text-sm font-semibold text-gray-700 mb-2">Konfirmasi Password Baru:</label>
+              <input
+                type="password"
+                value={passwordChangeModal.confirmPassword}
+                onChange={(e) => setPasswordChangeModal((prev) => ({ ...prev, confirmPassword: e.target.value, error: "", success: "" }))}
+                onKeyDown={(e) => e.key === "Enter" && handlePasswordChange()}
+                placeholder="Masukkan ulang password baru..."
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400"
+              />
+            </div>
+
+            {passwordChangeModal.error && (
+              <div className="bg-red-50 border border-red-200 rounded-lg p-3 mb-4 text-sm text-red-700">
+                ⚠️ {passwordChangeModal.error}
+              </div>
+            )}
+
+            {passwordChangeModal.success && (
+              <div className="bg-green-50 border border-green-200 rounded-lg p-3 mb-4 text-sm text-green-700">
+                ✅ {passwordChangeModal.success}
+              </div>
+            )}
+
+            <div className="flex gap-2">
+              <button
+                onClick={handlePasswordChange}
+                className="flex-1 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-semibold transition"
+              >
+                Simpan Password
+              </button>
+              <button
+                onClick={() => setPasswordChangeModal({ open: false, currentPassword: "", newPassword: "", confirmPassword: "", error: "", success: "" })}
                 className="bg-gray-200 hover:bg-gray-300 text-gray-700 px-4 py-2 rounded-lg text-sm font-semibold transition"
               >
                 Batal
