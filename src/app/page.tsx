@@ -2,6 +2,17 @@
 
 import { useState, useCallback, useRef, useMemo, useEffect } from "react";
 import * as XLSX from "xlsx";
+import { 
+  getEmployees, 
+  getAllSchedules, 
+  addEmployee, 
+  removeEmployee, 
+  updateSchedule,
+  updateEmployeePassword,
+  validateLogin,
+  syncEmployees,
+  type Employee 
+} from "@/actions/db";
 
 // Shift definitions
 const SHIFT_OPTIONS = ["P", "P0", "S", "M", "L", "C", ""];
@@ -24,13 +35,6 @@ const SHIFT_LABELS: Record<string, string> = {
   L:   "Libur",
   C:   "Cuti",
   "":  "—",
-};
-
-// Employee type with NIK
-type Employee = {
-  nik: string;
-  name: string;
-  password: string;
 };
 
 const INITIAL_EMPLOYEES: Employee[] = [
@@ -81,55 +85,51 @@ export default function Home() {
   const [year, setYear] = useState(now.getFullYear());
   const [month, setMonth] = useState(now.getMonth());
   
-  // Load employees from localStorage or use initial data
-  const [employees, setEmployees] = useState<Employee[]>(() => {
-    if (typeof window !== "undefined") {
-      const saved = localStorage.getItem("employees");
-      if (saved) {
-        try {
-          return JSON.parse(saved);
-        } catch {
-          return INITIAL_EMPLOYEES;
-        }
-      }
-    }
-    return INITIAL_EMPLOYEES;
-  });
-  // Load schedule data from localStorage or use empty object
-  const [allSchedule, setAllSchedule] = useState<AllScheduleData>(() => {
-    if (typeof window !== "undefined") {
-      const saved = localStorage.getItem("scheduleData");
-      if (saved) {
-        try {
-          return JSON.parse(saved);
-        } catch {
-          return {};
-        }
-      }
-    }
-    return {};
-  });
+  // Loading state
+  const [loading, setLoading] = useState(true);
   
-  // Persist employees to localStorage whenever they change
+  // Load employees from database
+  const [employees, setEmployees] = useState<Employee[]>([]);
+  
+  // Load schedule data from database
+  const [allSchedule, setAllSchedule] = useState<AllScheduleData>({});
+  
+  // Load initial data from database
   useEffect(() => {
-    if (typeof window !== "undefined") {
-      localStorage.setItem("employees", JSON.stringify(employees));
+    async function loadData() {
+      try {
+        const [emps, scheds] = await Promise.all([
+          getEmployees(),
+          getAllSchedules()
+        ]);
+        
+        if (emps.length > 0) {
+          setEmployees(emps);
+        } else {
+          // Initialize with default employees if database is empty
+          await syncEmployees(INITIAL_EMPLOYEES);
+          setEmployees(INITIAL_EMPLOYEES);
+        }
+        
+        setAllSchedule(scheds);
+      } catch (error) {
+        console.error("Failed to load data:", error);
+        // Fallback to initial employees
+        setEmployees(INITIAL_EMPLOYEES);
+      } finally {
+        setLoading(false);
+      }
     }
-  }, [employees]);
-
-  // Persist schedule data to localStorage whenever it changes
-  useEffect(() => {
-    if (typeof window !== "undefined") {
-      localStorage.setItem("scheduleData", JSON.stringify(allSchedule));
-    }
-  }, [allSchedule]);
-
+    loadData();
+  }, []);
+  
   // Add employee form
   const [newEmpName, setNewEmpName] = useState("");
   const [newEmpNik, setNewEmpNik] = useState("");
   const [newEmpPassword, setNewEmpPassword] = useState("");
   const [showAddEmployee, setShowAddEmployee] = useState(false);
   const [addEmpError, setAddEmpError] = useState("");
+  const [addEmpLoading, setAddEmpLoading] = useState(false);
 
   // Upload modal
   const [uploadError, setUploadError] = useState("");
@@ -147,6 +147,9 @@ export default function Home() {
 
   // Currently logged-in session: null = not logged in, "ADMIN" = admin, or NIK string
   const [loggedInAs, setLoggedInAs] = useState<string | null>(null);
+  
+  // Store logged in employee data for password change
+  const [loggedInEmployee, setLoggedInEmployee] = useState<Employee | null>(null);
 
   // Admin login modal
   const [adminLoginModal, setAdminLoginModal] = useState<{
@@ -224,7 +227,7 @@ export default function Home() {
   );
 
   const handleCellClick = useCallback(
-    (nik: string, day: number) => {
+    async (nik: string, day: number) => {
       if (!canEditCell(nik)) return;
 
       const currentVal = schedule[nik]?.[day] || "";
@@ -263,21 +266,42 @@ export default function Home() {
         attempts++;
       }
 
+      const newShift = SHIFT_OPTIONS[nextIndex];
+      
+      // Update local state immediately for better UX
       setAllSchedule((prev) => ({
         ...prev,
         [monthKey]: {
           ...(prev[monthKey] || {}),
           [nik]: {
             ...((prev[monthKey] || {})[nik] || {}),
-            [day]: SHIFT_OPTIONS[nextIndex],
+            [day]: newShift,
           },
         },
       }));
+      
+      // Persist to database
+      try {
+        await updateSchedule(nik, year, month, day, newShift);
+      } catch (error) {
+        console.error("Failed to update schedule:", error);
+        // Revert on error
+        setAllSchedule((prev) => ({
+          ...prev,
+          [monthKey]: {
+            ...(prev[monthKey] || {}),
+            [nik]: {
+              ...((prev[monthKey] || {})[nik] || {}),
+              [day]: currentVal,
+            },
+          },
+        }));
+      }
     },
-    [schedule, getLiburCountForDay, getCLCountForDay, canEditCell, monthKey]
+    [schedule, getLiburCountForDay, getCLCountForDay, canEditCell, monthKey, year, month]
   );
 
-  const handleAddEmployee = () => {
+  const handleAddEmployee = async () => {
     const name = newEmpName.trim();
     const nik = newEmpNik.trim();
     const password = newEmpPassword.trim();
@@ -290,27 +314,42 @@ export default function Home() {
     if (employees.some((e) => e.nik === nik)) { setAddEmpError("NIK sudah terdaftar."); return; }
     if (employees.some((e) => e.name === name)) { setAddEmpError("Nama sudah terdaftar."); return; }
 
-    setEmployees((prev) => [...prev, { nik, name, password }]);
-    setNewEmpName("");
-    setNewEmpNik("");
-    setNewEmpPassword("");
-    setShowAddEmployee(false);
-    setAddEmpError("");
+    setAddEmpLoading(true);
+    try {
+      const newEmp = { nik, name, password };
+      await addEmployee(newEmp);
+      setEmployees((prev) => [...prev, newEmp]);
+      setNewEmpName("");
+      setNewEmpNik("");
+      setNewEmpPassword("");
+      setShowAddEmployee(false);
+      setAddEmpError("");
+    } catch (error) {
+      console.error("Failed to add employee:", error);
+      setAddEmpError("Gagal menambahkan karyawan.");
+    } finally {
+      setAddEmpLoading(false);
+    }
   };
 
-  const handleRemoveEmployee = (nik: string) => {
-    setEmployees((prev) => prev.filter((e) => e.nik !== nik));
-    if (loggedInAs === nik) setLoggedInAs(null);
-    setAllSchedule((prev) => {
-      const next = { ...prev };
-      Object.keys(next).forEach((key) => {
-        if (next[key][nik]) {
-          next[key] = { ...next[key] };
-          delete next[key][nik];
-        }
+  const handleRemoveEmployee = async (nik: string) => {
+    try {
+      await removeEmployee(nik);
+      setEmployees((prev) => prev.filter((e) => e.nik !== nik));
+      if (loggedInAs === nik) setLoggedInAs(null);
+      setAllSchedule((prev) => {
+        const next = { ...prev };
+        Object.keys(next).forEach((key) => {
+          if (next[key][nik]) {
+            next[key] = { ...next[key] };
+            delete next[key][nik];
+          }
+        });
+        return next;
       });
-      return next;
-    });
+    } catch (error) {
+      console.error("Failed to remove employee:", error);
+    }
   };
 
   const prevMonth = () => {
@@ -370,7 +409,7 @@ export default function Home() {
     }
 
     const reader = new FileReader();
-    reader.onload = (event) => {
+    reader.onload = async (event) => {
       const text = event.target?.result as string;
       const lines = text.split(/\r?\n/).map((l) => l.trim()).filter((l) => l.length > 0);
 
@@ -415,11 +454,17 @@ export default function Home() {
         return;
       }
 
-      setEmployees(newEmployees);
-      if (loggedInAs !== ADMIN_NIK) setLoggedInAs(null);
-      setShowUploadModal(false);
-      setUploadError("");
-      if (fileInputRef.current) fileInputRef.current.value = "";
+      try {
+        await syncEmployees(newEmployees);
+        setEmployees(newEmployees);
+        if (loggedInAs !== ADMIN_NIK) setLoggedInAs(null);
+        setShowUploadModal(false);
+        setUploadError("");
+        if (fileInputRef.current) fileInputRef.current.value = "";
+      } catch (error) {
+        console.error("Failed to sync employees:", error);
+        setUploadError("Gagal mengupload data karyawan.");
+      }
     };
     reader.onerror = () => setUploadError("Gagal membaca file. Coba lagi.");
     reader.readAsText(file);
@@ -431,21 +476,27 @@ export default function Home() {
   };
 
   // Handle employee login submit
-  const handleLoginSubmit = () => {
-    const emp = employees.find((e) => e.nik === loginModal.nik);
-    if (!emp) return;
-    if (loginModal.inputPassword === emp.password) {
-      setLoggedInAs(emp.nik);
-      setLoginModal({ open: false, nik: "", name: "", inputPassword: "", error: "" });
-    } else {
-      setLoginModal((prev) => ({ ...prev, error: "Password salah. Coba lagi." }));
+  const handleLoginSubmit = async () => {
+    try {
+      const emp = await validateLogin(loginModal.nik, loginModal.inputPassword);
+      if (emp) {
+        setLoggedInAs(emp.nik);
+        setLoggedInEmployee(emp);
+        setLoginModal({ open: false, nik: "", name: "", inputPassword: "", error: "" });
+      } else {
+        setLoginModal((prev) => ({ ...prev, error: "Password salah. Coba lagi." }));
+      }
+    } catch (error) {
+      console.error("Login error:", error);
+      setLoginModal((prev) => ({ ...prev, error: "Terjadi kesalahan. Coba lagi." }));
     }
   };
 
   // Handle admin login submit
-  const handleAdminLoginSubmit = () => {
+  const handleAdminLoginSubmit = async () => {
     if (adminLoginModal.inputPassword === ADMIN_PASSWORD) {
       setLoggedInAs(ADMIN_NIK);
+      setLoggedInEmployee({ nik: ADMIN_NIK, name: "Administrator", password: ADMIN_PASSWORD });
       setAdminLoginModal({ open: false, inputPassword: "", error: "" });
     } else {
       setAdminLoginModal((prev) => ({ ...prev, error: "Password admin salah." }));
@@ -453,10 +504,13 @@ export default function Home() {
   };
 
   // Logout
-  const handleLogout = () => setLoggedInAs(null);
+  const handleLogout = () => {
+    setLoggedInAs(null);
+    setLoggedInEmployee(null);
+  };
 
   // Handle password change
-  const handlePasswordChange = () => {
+  const handlePasswordChange = async () => {
     setPasswordChangeModal((prev) => ({ ...prev, error: "", success: "" }));
     
     if (!loggedInAs || isAdmin) return;
@@ -481,15 +535,24 @@ export default function Home() {
       return;
     }
     
-    setEmployees((prev) =>
-      prev.map((e) => (e.nik === loggedInAs ? { ...e, password: newPassword } : e))
-    );
-    
-    setPasswordChangeModal((prev) => ({ ...prev, success: "Password berhasil diubah!", currentPassword: "", newPassword: "", confirmPassword: "" }));
-    
-    setTimeout(() => {
-      setPasswordChangeModal((prev) => ({ ...prev, open: false, success: "" }));
-    }, 1500);
+    try {
+      await updateEmployeePassword(loggedInAs, newPassword);
+      
+      setEmployees((prev) =>
+        prev.map((e) => (e.nik === loggedInAs ? { ...e, password: newPassword } : e))
+      );
+      
+      setLoggedInEmployee((prev) => prev ? { ...prev, password: newPassword } : null);
+      
+      setPasswordChangeModal((prev) => ({ ...prev, success: "Password berhasil diubah!", currentPassword: "", newPassword: "", confirmPassword: "" }));
+      
+      setTimeout(() => {
+        setPasswordChangeModal((prev) => ({ ...prev, open: false, success: "" }));
+      }, 1500);
+    } catch (error) {
+      console.error("Failed to change password:", error);
+      setPasswordChangeModal((prev) => ({ ...prev, error: "Gagal mengubah password." }));
+    }
   };
 
   // Export to Excel
@@ -576,6 +639,18 @@ export default function Home() {
     return null;
   };
   const loginStatus = loginStatusLabel();
+
+  // Loading state
+  if (loading) {
+    return (
+      <main className="min-h-screen bg-gray-100 flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-700 mx-auto mb-4"></div>
+          <p className="text-gray-600">Memuat data...</p>
+        </div>
+      </main>
+    );
+  }
 
   return (
     <main className="min-h-screen bg-gray-100">
@@ -957,9 +1032,10 @@ export default function Home() {
                 <div className="flex gap-2">
                   <button
                     onClick={handleAddEmployee}
-                    className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg text-sm font-semibold transition flex-1"
+                    disabled={addEmpLoading}
+                    className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg text-sm font-semibold transition flex-1 disabled:opacity-50"
                   >
-                    Tambah
+                    {addEmpLoading ? "Menambah..." : "Tambah"}
                   </button>
                   <button
                     onClick={() => {
