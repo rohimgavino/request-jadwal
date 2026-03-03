@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback, useRef, useMemo } from "react";
+import { useState, useCallback, useRef, useMemo, useEffect } from "react";
 import * as XLSX from "xlsx";
 
 // Shift definitions
@@ -80,8 +80,29 @@ export default function Home() {
   const now = new Date();
   const [year, setYear] = useState(now.getFullYear());
   const [month, setMonth] = useState(now.getMonth());
-  const [employees, setEmployees] = useState<Employee[]>(INITIAL_EMPLOYEES);
+  
+  // Load employees from localStorage or use initial data
+  const [employees, setEmployees] = useState<Employee[]>(() => {
+    if (typeof window !== "undefined") {
+      const saved = localStorage.getItem("employees");
+      if (saved) {
+        try {
+          return JSON.parse(saved);
+        } catch {
+          return INITIAL_EMPLOYEES;
+        }
+      }
+    }
+    return INITIAL_EMPLOYEES;
+  });
   const [allSchedule, setAllSchedule] = useState<AllScheduleData>({});
+  
+  // Persist employees to localStorage whenever they change
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      localStorage.setItem("employees", JSON.stringify(employees));
+    }
+  }, [employees]);
 
   // Add employee form
   const [newEmpName, setNewEmpName] = useState("");
