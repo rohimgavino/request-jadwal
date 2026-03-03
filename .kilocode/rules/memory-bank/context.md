@@ -32,6 +32,8 @@ The template is a clean Next.js 16 starter with TypeScript and Tailwind CSS 4. I
 - [x] Added password change feature - each NIK can change their own password via 🔐 button when logged in
 - [x] Added auto-save for schedule data to localStorage - jadwal tersimpan otomatis per bulan
 - [x] Updated edit permissions - all logged-in users (admin and regular NIK) can now edit any schedule row
+- [x] Added database support with Drizzle ORM for data persistence
+- [x] Migrated from localStorage to database - data now syncs across all users/computers
 
 ## Current Structure
 
@@ -41,6 +43,8 @@ The template is a clean Next.js 16 starter with TypeScript and Tailwind CSS 4. I
 | `src/app/layout.tsx` | Root layout | ✅ Ready |
 | `src/app/globals.css` | Global styles | ✅ Ready |
 | `.kilocode/` | AI context & recipes | ✅ Ready |
+| `src/db/` | Database (Drizzle + SQLite) | ✅ Ready |
+| `src/actions/db.ts` | Database actions (CRUD) | ✅ Ready |
 
 ## Current Focus
 
