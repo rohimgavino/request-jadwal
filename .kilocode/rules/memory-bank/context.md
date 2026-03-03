@@ -31,6 +31,7 @@ The template is a clean Next.js 16 starter with TypeScript and Tailwind CSS 4. I
 - [x] Fixed upload data not persisting by adding localStorage persistence for employee data
 - [x] Added password change feature - each NIK can change their own password via 🔐 button when logged in
 - [x] Added auto-save for schedule data to localStorage - jadwal tersimpan otomatis per bulan
+- [x] Updated edit permissions - all logged-in users (admin and regular NIK) can now edit any schedule row
 
 ## Current Structure
 
