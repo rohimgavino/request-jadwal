@@ -95,7 +95,20 @@ export default function Home() {
     }
     return INITIAL_EMPLOYEES;
   });
-  const [allSchedule, setAllSchedule] = useState<AllScheduleData>({});
+  // Load schedule data from localStorage or use empty object
+  const [allSchedule, setAllSchedule] = useState<AllScheduleData>(() => {
+    if (typeof window !== "undefined") {
+      const saved = localStorage.getItem("scheduleData");
+      if (saved) {
+        try {
+          return JSON.parse(saved);
+        } catch {
+          return {};
+        }
+      }
+    }
+    return {};
+  });
   
   // Persist employees to localStorage whenever they change
   useEffect(() => {
@@ -103,6 +116,13 @@ export default function Home() {
       localStorage.setItem("employees", JSON.stringify(employees));
     }
   }, [employees]);
+
+  // Persist schedule data to localStorage whenever it changes
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      localStorage.setItem("scheduleData", JSON.stringify(allSchedule));
+    }
+  }, [allSchedule]);
 
   // Add employee form
   const [newEmpName, setNewEmpName] = useState("");
