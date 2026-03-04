@@ -34,6 +34,7 @@ The template is a clean Next.js 16 starter with TypeScript and Tailwind CSS 4. I
 - [x] Updated edit permissions - all logged-in users (admin and regular NIK) can now edit any schedule row
 - [x] Added database support with Drizzle ORM for data persistence
 - [x] Migrated from localStorage to database - data now syncs across all users/computers
+- [x] Fixed deploy error - replaced unavailable @kilocode/app-builder-db package with better-sqlite3
 
 ## Current Structure
 

@@ -1,8 +1,6 @@
 "use server";
 
-import { db } from "@/db";
-import { employees, schedules } from "@/db/schema";
-import { eq, and } from "drizzle-orm";
+import { db, schema } from "@/db";
 
 // Employee types
 export type Employee = {
@@ -11,72 +9,48 @@ export type Employee = {
   password: string;
 };
 
+// Helper to get all employees from the database
+function getAllEmployees(): Employee[] {
+  const stmt = db.prepare("SELECT nik, name, password FROM employees");
+  return stmt.all() as Employee[];
+}
+
 // Get all employees
 export async function getEmployees(): Promise<Employee[]> {
-  const result = await db.select({
-    nik: employees.nik,
-    name: employees.name,
-    password: employees.password,
-  }).from(employees);
-  return result;
+  return getAllEmployees();
 }
 
 // Add a new employee
 export async function addEmployee(emp: Employee): Promise<void> {
-  await db.insert(employees).values(emp);
+  const stmt = db.prepare("INSERT INTO employees (nik, name, password) VALUES (?, ?, ?)");
+  stmt.run(emp.nik, emp.name, emp.password);
 }
 
 // Update employee password
 export async function updateEmployeePassword(nik: string, newPassword: string): Promise<void> {
-  await db.update(employees).set({ password: newPassword }).where(eq(employees.nik, nik));
+  const stmt = db.prepare("UPDATE employees SET password = ? WHERE nik = ?");
+  stmt.run(newPassword, nik);
 }
 
 // Remove an employee
 export async function removeEmployee(nik: string): Promise<void> {
-  await db.delete(schedules).where(eq(schedules.nik, nik));
-  await db.delete(employees).where(eq(employees.nik, nik));
+  const stmt1 = db.prepare("DELETE FROM schedules WHERE nik = ?");
+  stmt1.run(nik);
+  const stmt2 = db.prepare("DELETE FROM employees WHERE nik = ?");
+  stmt2.run(nik);
 }
 
 // Schedule types
 export type ScheduleData = Record<string, Record<number, string>>; // monthKey -> nik -> day -> shift
 
-// Get all schedules for a specific year/month
-export async function getSchedules(year: number, month: number): Promise<Record<string, Record<number, string>>> {
-  const result = await db.select({
-    nik: schedules.nik,
-    day: schedules.day,
-    shift: schedules.shift,
-  }).from(schedules).where(
-    and(
-      eq(schedules.year, year),
-      eq(schedules.month, month)
-    )
-  );
-
-  // Convert to nested record
-  const schedule: Record<string, Record<number, string>> = {};
-  for (const row of result) {
-    if (!schedule[row.nik]) {
-      schedule[row.nik] = {};
-    }
-    schedule[row.nik][row.day] = row.shift;
-  }
-  return schedule;
-}
-
 // Get all schedules (all months)
 export async function getAllSchedules(): Promise<Record<string, Record<string, Record<number, string>>>> {
-  const result = await db.select({
-    nik: schedules.nik,
-    year: schedules.year,
-    month: schedules.month,
-    day: schedules.day,
-    shift: schedules.shift,
-  }).from(schedules);
+  const stmt = db.prepare("SELECT nik, year, month, day, shift FROM schedules");
+  const rows = stmt.all() as Array<{ nik: string; year: number; month: number; day: number; shift: string }>;
 
   // Convert to nested record: year-month -> nik -> day -> shift
   const allSchedules: Record<string, Record<string, Record<number, string>>> = {};
-  for (const row of result) {
+  for (const row of rows) {
     const monthKey = `${row.year}-${String(row.month + 1).padStart(2, "0")}`;
     if (!allSchedules[monthKey]) {
       allSchedules[monthKey] = {};
@@ -98,95 +72,48 @@ export async function updateSchedule(
   shift: string
 ): Promise<void> {
   // Check if entry exists
-  const existing = await db.select()
-    .from(schedules)
-    .where(
-      and(
-        eq(schedules.nik, nik),
-        eq(schedules.year, year),
-        eq(schedules.month, month),
-        eq(schedules.day, day)
-      )
-    )
-    .limit(1);
+  const checkStmt = db.prepare(
+    "SELECT id FROM schedules WHERE nik = ? AND year = ? AND month = ? AND day = ?"
+  );
+  const existing = checkStmt.get(nik, year, month, day) as { id: number } | undefined;
 
-  if (existing.length > 0) {
+  if (existing) {
     if (shift) {
       // Update existing
-      await db.update(schedules)
-        .set({ shift })
-        .where(
-          and(
-            eq(schedules.nik, nik),
-            eq(schedules.year, year),
-            eq(schedules.month, month),
-            eq(schedules.day, day)
-          )
-        );
+      const updateStmt = db.prepare(
+        "UPDATE schedules SET shift = ? WHERE nik = ? AND year = ? AND month = ? AND day = ?"
+      );
+      updateStmt.run(shift, nik, year, month, day);
     } else {
       // Delete if shift is empty
-      await db.delete(schedules)
-        .where(
-          and(
-            eq(schedules.nik, nik),
-            eq(schedules.year, year),
-            eq(schedules.month, month),
-            eq(schedules.day, day)
-          )
-        );
+      const deleteStmt = db.prepare(
+        "DELETE FROM schedules WHERE nik = ? AND year = ? AND month = ? AND day = ?"
+      );
+      deleteStmt.run(nik, year, month, day);
     }
   } else if (shift) {
     // Insert new
-    await db.insert(schedules).values({
-      nik,
-      year,
-      month,
-      day,
-      shift,
-    });
-  }
-}
-
-// Bulk update schedules (for initial data sync)
-export async function syncSchedules(data: Record<string, Record<string, Record<number, string>>>): Promise<void> {
-  // This is a simple sync - delete all and re-insert
-  // For production, you'd want to do upsert
-  
-  // Clear all schedules (or you could be smarter about this)
-  await db.delete(schedules);
-
-  // Insert all schedules
-  const values: typeof schedules.$inferInsert[] = [];
-  for (const [monthKey, monthData] of Object.entries(data)) {
-    const [yearStr, monthStr] = monthKey.split("-");
-    const year = parseInt(yearStr);
-    const month = parseInt(monthStr) - 1; // 0-indexed
-
-    for (const [nik, days] of Object.entries(monthData)) {
-      for (const [dayStr, shift] of Object.entries(days)) {
-        if (shift) {
-          values.push({
-            nik,
-            year,
-            month,
-            day: parseInt(dayStr),
-            shift,
-          });
-        }
-      }
-    }
-  }
-
-  if (values.length > 0) {
-    await db.insert(schedules).values(values);
+    const insertStmt = db.prepare(
+      "INSERT INTO schedules (nik, year, month, day, shift) VALUES (?, ?, ?, ?, ?)"
+    );
+    insertStmt.run(nik, year, month, day, shift);
   }
 }
 
 // Bulk sync employees (replace all)
 export async function syncEmployees(emps: Employee[]): Promise<void> {
-  await db.delete(employees);
+  // Use transaction for atomic operation
+  const deleteStmt = db.prepare("DELETE FROM employees");
+  deleteStmt.run();
+  
   if (emps.length > 0) {
-    await db.insert(employees).values(emps);
+    const insertStmt = db.prepare("INSERT INTO employees (nik, name, password) VALUES (?, ?, ?)");
+    const insertMany = db.transaction((employees: Employee[]) => {
+      for (const emp of employees) {
+        insertStmt.run(emp.nik, emp.name, emp.password);
+      }
+    });
+    insertMany(emps);
   }
 }
 
@@ -196,14 +123,10 @@ export async function validateLogin(nik: string, password: string): Promise<Empl
     return { nik: "ADMIN", name: "Administrator", password: "admin123" };
   }
 
-  const result = await db.select({
-    nik: employees.nik,
-    name: employees.name,
-    password: employees.password,
-  }).from(employees).where(eq(employees.nik, nik)).limit(1);
+  const stmt = db.prepare("SELECT nik, name, password FROM employees WHERE nik = ?");
+  const result = stmt.get(nik) as Employee | undefined;
 
-  if (result.length === 0) return null;
-  const emp = result[0];
-  if (emp.password !== password) return null;
-  return emp;
+  if (!result) return null;
+  if (result.password !== password) return null;
+  return result;
 }
