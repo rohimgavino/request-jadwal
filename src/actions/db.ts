@@ -9,25 +9,53 @@ export type Employee = {
   password: string;
 };
 
-// In-memory fallback when Supabase is not configured
-let memoryEmployees: Employee[] = [
-  { nik: "001", name: "Ahmad Fauzi", password: "001" },
-  { nik: "002", name: "Budi Santoso", password: "002" },
-  { nik: "003", name: "Citra Dewi", password: "003" },
-  { nik: "004", name: "Dian Pratama", password: "004" },
-  { nik: "005", name: "Eka Rahayu", password: "005" },
-  { nik: "006", name: "Fajar Nugroho", password: "006" },
-  { nik: "007", name: "Gita Permata", password: "007" },
-  { nik: "008", name: "Hendra Wijaya", password: "008" },
-];
-
-// In-memory schedule fallback
+// Schedule types
 type MonthSchedule = Record<number, string>; // day -> shift
 type AllScheduleData = Record<string, Record<string, MonthSchedule>>; // monthKey -> nik -> day -> shift
+export type ScheduleData = Record<string, Record<number, string>>;
+
+// In-memory fallback when Supabase is not configured
+let memoryEmployees: Employee[] = [];
 let memorySchedules: AllScheduleData = {};
+
+// Load from localStorage on server (check if we're in browser)
+function loadFromBrowserStorage() {
+  if (typeof window === "undefined") return;
+  
+  const storedEmployees = localStorage.getItem("jadwal_employees");
+  const storedSchedules = localStorage.getItem("jadwal_schedules");
+  
+  if (storedEmployees) {
+    try {
+      memoryEmployees = JSON.parse(storedEmployees);
+    } catch (e) {
+      console.error("Error parsing employees from localStorage:", e);
+    }
+  }
+  
+  if (storedSchedules) {
+    try {
+      memorySchedules = JSON.parse(storedSchedules);
+    } catch (e) {
+      console.error("Error parsing schedules from localStorage:", e);
+    }
+  }
+}
+
+// Save to localStorage
+function saveToBrowserStorage() {
+  if (typeof window === "undefined") return;
+  localStorage.setItem("jadwal_employees", JSON.stringify(memoryEmployees));
+  localStorage.setItem("jadwal_schedules", JSON.stringify(memorySchedules));
+}
 
 // Get all employees
 export async function getEmployees(): Promise<Employee[]> {
+  // Load from browser storage if Supabase not configured and not yet loaded
+  if ((!isConfigured || !supabase) && memoryEmployees.length === 0) {
+    loadFromBrowserStorage();
+  }
+  
   if (!isConfigured || !supabase) {
     return memoryEmployees;
   }
@@ -49,6 +77,7 @@ export async function addEmployee(emp: Employee): Promise<void> {
   if (!isConfigured || !supabase) {
     if (!memoryEmployees.find(e => e.nik === emp.nik)) {
       memoryEmployees.push(emp);
+      saveToBrowserStorage();
     }
     return;
   }
@@ -67,7 +96,10 @@ export async function addEmployee(emp: Employee): Promise<void> {
 export async function updateEmployeePassword(nik: string, newPassword: string): Promise<void> {
   if (!isConfigured || !supabase) {
     const emp = memoryEmployees.find(e => e.nik === nik);
-    if (emp) emp.password = newPassword;
+    if (emp) {
+      emp.password = newPassword;
+      saveToBrowserStorage();
+    }
     return;
   }
   
@@ -92,6 +124,7 @@ export async function removeEmployee(nik: string): Promise<void> {
         delete memorySchedules[monthKey][nik];
       }
     });
+    saveToBrowserStorage();
     return;
   }
   
@@ -109,11 +142,13 @@ export async function removeEmployee(nik: string): Promise<void> {
   }
 }
 
-// Schedule types
-export type ScheduleData = Record<string, Record<number, string>>;
-
 // Get all schedules (all months)
 export async function getAllSchedules(): Promise<Record<string, Record<string, Record<number, string>>>> {
+  // Load from browser storage if Supabase not configured and not yet loaded
+  if ((!isConfigured || !supabase) && Object.keys(memorySchedules).length === 0) {
+    loadFromBrowserStorage();
+  }
+  
   if (!isConfigured || !supabase) {
     return memorySchedules;
   }
@@ -159,6 +194,7 @@ export async function updateSchedule(
     } else {
       delete memorySchedules[monthKey][nik][day];
     }
+    saveToBrowserStorage();
     return;
   }
   
@@ -210,6 +246,7 @@ export async function updateSchedule(
 export async function syncEmployees(emps: Employee[]): Promise<void> {
   if (!isConfigured || !supabase) {
     memoryEmployees = emps;
+    saveToBrowserStorage();
     return;
   }
   

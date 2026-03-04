@@ -37,16 +37,7 @@ const SHIFT_LABELS: Record<string, string> = {
   "":  "—",
 };
 
-const INITIAL_EMPLOYEES: Employee[] = [
-  { nik: "001", name: "Ahmad Fauzi",   password: "001" },
-  { nik: "002", name: "Budi Santoso",  password: "002" },
-  { nik: "003", name: "Citra Dewi",    password: "003" },
-  { nik: "004", name: "Dian Pratama",  password: "004" },
-  { nik: "005", name: "Eka Rahayu",    password: "005" },
-  { nik: "006", name: "Fajar Nugroho", password: "006" },
-  { nik: "007", name: "Gita Permata",  password: "007" },
-  { nik: "008", name: "Hendra Wijaya", password: "008" },
-];
+const INITIAL_EMPLOYEES: Employee[] = [];
 
 // Admin credentials (special user that can edit all rows)
 const ADMIN_NIK = "ADMIN";
@@ -105,17 +96,11 @@ export default function Home() {
         
         if (emps.length > 0) {
           setEmployees(emps);
-        } else {
-          // Initialize with default employees if database is empty
-          await syncEmployees(INITIAL_EMPLOYEES);
-          setEmployees(INITIAL_EMPLOYEES);
         }
         
         setAllSchedule(scheds);
       } catch (error) {
         console.error("Failed to load data:", error);
-        // Fallback to initial employees
-        setEmployees(INITIAL_EMPLOYEES);
       } finally {
         setLoading(false);
       }
