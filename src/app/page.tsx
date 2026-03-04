@@ -184,9 +184,11 @@ export default function Home() {
   const canEditCell = useCallback(
     (nik: string) => {
       if (loggedInAs === null) return false; // must be logged in
-      return true; // both admin and logged-in users can edit all rows
+      // Admin can edit all rows, regular users can only edit their own row
+      if (isAdmin) return true;
+      return loggedInAs === nik; // can only edit own row
     },
-    [loggedInAs]
+    [loggedInAs, isAdmin]
   );
 
   // A cell is locked for "L" if the day already has MAX_LIBUR_PER_DAY employees with L
