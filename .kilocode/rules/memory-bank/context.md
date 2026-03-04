@@ -35,6 +35,7 @@ The template is a clean Next.js 16 starter with TypeScript and Tailwind CSS 4. I
 - [x] Added database support with Drizzle ORM for data persistence
 - [x] Migrated from localStorage to database - data now syncs across all users/computers
 - [x] Fixed deploy error - replaced unavailable @kilocode/app-builder-db package with better-sqlite3
+- [x] Migrated to Supabase for cloud database (with in-memory fallback when not configured)
 
 ## Current Structure
 

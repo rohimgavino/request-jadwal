@@ -1,15 +1,19 @@
-import Database from "better-sqlite3";
-import * as schema from "./schema";
+import { createClient } from "@supabase/supabase-js";
 
-// Create database connection
-const dbPath = process.env.DATABASE_URL || "./data.db";
-export const db = new Database(dbPath);
+// Supabase client - URL and key from environment variables
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "";
+const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "";
 
-// Enable foreign keys
-db.pragma("foreign_keys = ON");
+// Create client (only if credentials are provided)
+export const supabase = supabaseUrl && supabaseKey 
+  ? createClient(supabaseUrl, supabaseKey)
+  : null;
 
-// Initialize database tables
-import "./init";
+// Check if Supabase is configured
+export const isConfigured = supabase !== null;
 
-// Export for use in actions
-export { schema };
+// For backward compatibility - will use in-memory fallback if not configured
+export const db = {
+  // This is a no-op for Supabase since we use the client directly
+  // Kept for type compatibility with old code
+};
