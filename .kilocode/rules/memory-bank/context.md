@@ -37,6 +37,7 @@ The template is a clean Next.js 16 starter with TypeScript and Tailwind CSS 4. I
 - [x] Fixed deploy error - replaced unavailable @kilocode/app-builder-db package with better-sqlite3
 - [x] Migrated to Supabase for cloud database (with in-memory fallback when not configured)
 - [x] Added localStorage persistence for browser-only mode (data survives page refresh)
+- [x] Configured Supabase credentials - added .env.local with user's credentials
 
 ## Current Structure
 
