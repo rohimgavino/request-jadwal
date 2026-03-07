@@ -73,8 +73,14 @@ function getMonthKey(year: number, month: number) {
 
 export default function Home() {
   const now = new Date();
-  const [year, setYear] = useState(now.getFullYear());
-  const [month, setMonth] = useState(now.getMonth());
+  const currentMonth = now.getMonth();
+  const currentYear = now.getFullYear();
+  // Initialize to next month
+  const initialMonth = currentMonth === 11 ? 0 : currentMonth + 1;
+  const initialYear = currentMonth === 11 ? currentYear + 1 : currentYear;
+  
+  const [year, setYear] = useState(initialYear);
+  const [month, setMonth] = useState(initialMonth);
   
   // Loading state
   const [loading, setLoading] = useState(true);
