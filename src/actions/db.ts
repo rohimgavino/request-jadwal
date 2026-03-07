@@ -19,6 +19,7 @@ export type ScheduleData = Record<string, Record<number, string>>;
 let memoryEmployees: Employee[] = [];
 let memorySchedules: Record<string, Record<string, Record<number, string>>> = {};
 let memoryAdminLockedDates: Record<string, number[]> = {}; // monthKey -> [days]
+let memoryEmployeeNotes: Record<string, Record<string, string>> = {}; // monthKey -> nik -> note
 
 // Load from localStorage on server (check if we're in browser)
 function loadFromBrowserStorage() {
@@ -27,6 +28,7 @@ function loadFromBrowserStorage() {
   const storedEmployees = localStorage.getItem("jadwal_employees");
   const storedSchedules = localStorage.getItem("jadwal_schedules");
   const storedAdminLocked = localStorage.getItem("jadwal_admin_locked_dates");
+  const storedNotes = localStorage.getItem("jadwal_employee_notes");
   
   if (storedEmployees) {
     try {
@@ -51,6 +53,14 @@ function loadFromBrowserStorage() {
       console.error("Error parsing admin locked dates from localStorage:", e);
     }
   }
+  
+  if (storedNotes) {
+    try {
+      memoryEmployeeNotes = JSON.parse(storedNotes);
+    } catch (e) {
+      console.error("Error parsing employee notes from localStorage:", e);
+    }
+  }
 }
 
 // Save to localStorage
@@ -59,6 +69,7 @@ function saveToBrowserStorage() {
   localStorage.setItem("jadwal_employees", JSON.stringify(memoryEmployees));
   localStorage.setItem("jadwal_schedules", JSON.stringify(memorySchedules));
   localStorage.setItem("jadwal_admin_locked_dates", JSON.stringify(memoryAdminLockedDates));
+  localStorage.setItem("jadwal_employee_notes", JSON.stringify(memoryEmployeeNotes));
 }
 
 // Initialize database tables
@@ -95,6 +106,19 @@ async function initDatabase() {
         month INT NOT NULL,
         day INT NOT NULL,
         UNIQUE KEY unique_locked_date (year, month, day)
+      )
+    `);
+    
+    // Create employee notes table
+    await execute(`
+      CREATE TABLE IF NOT EXISTS employee_notes (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        nik VARCHAR(50) NOT NULL,
+        year INT NOT NULL,
+        month INT NOT NULL,
+        note TEXT,
+        UNIQUE KEY unique_note (nik, year, month),
+        FOREIGN KEY (nik) REFERENCES employees(nik) ON DELETE CASCADE
       )
     `);
     
@@ -358,6 +382,58 @@ export async function saveAdminLockedDates(dates: Record<string, number[]>): Pro
     console.error("Error saving admin locked dates to MySQL:", error);
     // Fallback to memory
     memoryAdminLockedDates = dates;
+    saveToBrowserStorage();
+  }
+}
+
+// Get employee notes (all notes across months)
+export async function getEmployeeNotes(): Promise<Record<string, Record<string, string>>> {
+  try {
+    const rows = await query<RowDataPacket[]>(
+      "SELECT nik, year, month, note FROM employee_notes WHERE note IS NOT NULL AND note <> ''"
+    );
+    
+    const result: Record<string, Record<string, string>> = {};
+    for (const row of rows) {
+      const monthKey = `${row.year}-${String(row.month).padStart(2, "0")}`;
+      if (!result[monthKey]) {
+        result[monthKey] = {};
+      }
+      result[monthKey][row.nik] = row.note || "";
+    }
+    return result;
+  } catch (error) {
+    console.error("Error fetching employee notes from MySQL:", error);
+    // Fallback to memory
+    if (Object.keys(memoryEmployeeNotes).length === 0) {
+      loadFromBrowserStorage();
+    }
+    return memoryEmployeeNotes;
+  }
+}
+
+// Save employee notes (replace all)
+export async function saveEmployeeNotes(notes: Record<string, Record<string, string>>): Promise<void> {
+  try {
+    // Delete all existing notes
+    await execute("DELETE FROM employee_notes");
+    
+    // Insert new notes
+    for (const [monthKey, nikNotes] of Object.entries(notes)) {
+      const [year, month] = monthKey.split("-").map(Number);
+      for (const [nik, note] of Object.entries(nikNotes)) {
+        if (note && note.trim()) {
+          await execute(
+            "INSERT INTO employee_notes (nik, year, month, note) VALUES (?, ?, ?, ?)",
+            [nik, year, month, note]
+          );
+        }
+      }
+    }
+  } catch (error) {
+    console.error("Error saving employee notes to MySQL:", error);
+    // Fallback to memory
+    memoryEmployeeNotes = notes;
     saveToBrowserStorage();
   }
 }

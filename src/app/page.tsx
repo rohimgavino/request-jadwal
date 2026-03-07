@@ -13,6 +13,8 @@ import {
   syncEmployees,
   getAdminLockedDates,
   saveAdminLockedDates,
+  getEmployeeNotes,
+  saveEmployeeNotes,
   type Employee 
 } from "@/actions/db";
 
@@ -96,6 +98,17 @@ export default function Home() {
   // Admin-defined locked dates per month (keyed by YYYY-MM, value is array of locked days)
   const [adminLockedDates, setAdminLockedDates] = useState<Record<string, number[]>>({});
   
+  // Employee notes per month (keyed by YYYY-MM, then nik, then note text)
+  const [employeeNotes, setEmployeeNotes] = useState<Record<string, Record<string, string>>>({});
+  
+  // Notes modal state
+  const [notesModal, setNotesModal] = useState<{
+    open: boolean;
+    nik: string;
+    name: string;
+    note: string;
+  }>({ open: false, nik: "", name: "", note: "" });
+  
   // Toggle admin locked date for current month
   const toggleAdminLockedDate = useCallback((day: number) => {
     const key = getMonthKey(year, month);
@@ -115,14 +128,37 @@ export default function Home() {
     });
   }, [year, month]);
   
+  // Open notes modal for an employee
+  const openNotesModal = useCallback((nik: string, name: string) => {
+    const key = getMonthKey(year, month);
+    const currentNote = employeeNotes[key]?.[nik] || "";
+    setNotesModal({ open: true, nik, name, note: currentNote });
+  }, [year, month, employeeNotes]);
+  
+  // Save employee note
+  const handleSaveNote = useCallback(async () => {
+    const key = getMonthKey(year, month);
+    const newNotes = {
+      ...employeeNotes,
+      [key]: {
+        ...(employeeNotes[key] || {}),
+        [notesModal.nik]: notesModal.note
+      }
+    };
+    setEmployeeNotes(newNotes);
+    await saveEmployeeNotes(newNotes);
+    setNotesModal({ open: false, nik: "", name: "", note: "" });
+  }, [year, month, employeeNotes, notesModal]);
+  
   // Load initial data from database
   useEffect(() => {
     async function loadData() {
       try {
-        const [emps, scheds, lockedDates] = await Promise.all([
+        const [emps, scheds, lockedDates, notes] = await Promise.all([
           getEmployees(),
           getAllSchedules(),
-          getAdminLockedDates()
+          getAdminLockedDates(),
+          getEmployeeNotes()
         ]);
         
         if (emps.length > 0) {
@@ -131,6 +167,7 @@ export default function Home() {
         
         setAllSchedule(scheds);
         setAdminLockedDates(lockedDates);
+        setEmployeeNotes(notes);
       } catch (error) {
         console.error("Failed to load data:", error);
       } finally {
@@ -920,6 +957,9 @@ const isAdminLockedDay = (day: number, month: number, year: number, adminLocked:
                 <th className="px-2 py-3 text-center font-semibold min-w-[90px] bg-blue-800 border-r border-blue-600 text-xs">
                   Rekap
                 </th>
+                <th className="px-2 py-3 text-center font-semibold min-w-[60px] bg-blue-800 border-r border-blue-600 text-xs">
+                  📝
+                </th>
                 <th className="px-2 py-3 text-center font-semibold min-w-[80px] bg-blue-800">
                   Aksi
                 </th>
@@ -1061,6 +1101,17 @@ const isAdminLockedDay = (day: number, month: number, year: number, adminLocked:
                         )}
                       </div>
                     </td>
+                    
+                    {/* Notes button */}
+                    <td className="px-1 py-1 text-center border-r border-gray-200">
+                      <button
+                        onClick={() => openNotesModal(emp.nik, emp.name)}
+                        className={`text-lg hover:scale-110 transition ${employeeNotes[monthKey]?.[emp.nik] ? "text-yellow-500" : "text-gray-400"}`}
+                        title="Tambah catatan"
+                      >
+                        📝
+                      </button>
+                    </td>
 
                     {/* Action */}
                     <td className="px-2 py-2 text-center">
@@ -1124,6 +1175,7 @@ const isAdminLockedDay = (day: number, month: number, year: number, adminLocked:
                   );
                 })}
                 <td className="px-2 py-2 text-center text-blue-700 text-xs border-r border-blue-200">—</td>
+                <td className="px-2 py-2 text-center text-blue-700 text-xs border-r border-blue-200">📝</td>
                 <td className="px-2 py-2 text-center text-blue-700 text-xs">—</td>
               </tr>
             </tbody>
@@ -1443,6 +1495,55 @@ const isAdminLockedDay = (day: number, month: number, year: number, adminLocked:
               </button>
               <button
                 onClick={() => setAdminLoginModal({ open: false, inputPassword: "", error: "" })}
+                className="bg-gray-200 hover:bg-gray-300 text-gray-700 px-4 py-2 rounded-lg text-sm font-semibold transition"
+              >
+                Batal
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Notes Modal */}
+      {notesModal.open && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-lg font-bold text-gray-800">📝 Catatan untuk {notesModal.name}</h2>
+              <button
+                onClick={() => setNotesModal({ open: false, nik: "", name: "", note: "" })}
+                className="text-gray-400 hover:text-gray-600 text-2xl leading-none"
+              >
+                ×
+              </button>
+            </div>
+
+            <div className="bg-yellow-50 border border-yellow-200 rounded-xl p-4 mb-4">
+              <p className="text-sm text-yellow-800">
+                Bulan: <strong>{monthName}</strong>
+              </p>
+            </div>
+
+            <div className="mb-4">
+              <label className="block text-sm font-semibold text-gray-700 mb-2">Catatan:</label>
+              <textarea
+                value={notesModal.note}
+                onChange={(e) => setNotesModal((prev) => ({ ...prev, note: e.target.value }))}
+                placeholder="Masukkan catatan untuk karyawan ini..."
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-yellow-400 h-32 resize-none"
+                autoFocus
+              />
+            </div>
+
+            <div className="flex gap-2">
+              <button
+                onClick={handleSaveNote}
+                className="flex-1 bg-yellow-500 hover:bg-yellow-600 text-white px-4 py-2 rounded-lg text-sm font-semibold transition"
+              >
+                💾 Simpan Catatan
+              </button>
+              <button
+                onClick={() => setNotesModal({ open: false, nik: "", name: "", note: "" })}
                 className="bg-gray-200 hover:bg-gray-300 text-gray-700 px-4 py-2 rounded-lg text-sm font-semibold transition"
               >
                 Batal
