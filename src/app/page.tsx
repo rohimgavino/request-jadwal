@@ -11,6 +11,8 @@ import {
   updateEmployeePassword,
   validateLogin,
   syncEmployees,
+  getAdminLockedDates,
+  saveAdminLockedDates,
   type Employee 
 } from "@/actions/db";
 
@@ -99,13 +101,17 @@ export default function Home() {
     const key = getMonthKey(year, month);
     setAdminLockedDates(prev => {
       const currentLocked = prev[key] || [];
+      let newLockedDates: Record<string, number[]>;
       if (currentLocked.includes(day)) {
         // Unlock the day
-        return { ...prev, [key]: currentLocked.filter((d: number) => d !== day) };
+        newLockedDates = { ...prev, [key]: currentLocked.filter((d: number) => d !== day) };
       } else {
         // Lock the day
-        return { ...prev, [key]: [...currentLocked, day].sort((a: number, b: number) => a - b) };
+        newLockedDates = { ...prev, [key]: [...currentLocked, day].sort((a: number, b: number) => a - b) };
       }
+      // Save to database
+      saveAdminLockedDates(newLockedDates).catch(console.error);
+      return newLockedDates;
     });
   }, [year, month]);
   
@@ -113,9 +119,10 @@ export default function Home() {
   useEffect(() => {
     async function loadData() {
       try {
-        const [emps, scheds] = await Promise.all([
+        const [emps, scheds, lockedDates] = await Promise.all([
           getEmployees(),
-          getAllSchedules()
+          getAllSchedules(),
+          getAdminLockedDates()
         ]);
         
         if (emps.length > 0) {
@@ -123,6 +130,7 @@ export default function Home() {
         }
         
         setAllSchedule(scheds);
+        setAdminLockedDates(lockedDates);
       } catch (error) {
         console.error("Failed to load data:", error);
       } finally {

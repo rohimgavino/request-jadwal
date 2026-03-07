@@ -17,7 +17,8 @@ export type ScheduleData = Record<string, Record<number, string>>;
 
 // In-memory fallback when MySQL is not available
 let memoryEmployees: Employee[] = [];
-let memorySchedules: AllScheduleData = {};
+let memorySchedules: Record<string, Record<string, Record<number, string>>> = {};
+let memoryAdminLockedDates: Record<string, number[]> = {}; // monthKey -> [days]
 
 // Load from localStorage on server (check if we're in browser)
 function loadFromBrowserStorage() {
@@ -25,6 +26,7 @@ function loadFromBrowserStorage() {
   
   const storedEmployees = localStorage.getItem("jadwal_employees");
   const storedSchedules = localStorage.getItem("jadwal_schedules");
+  const storedAdminLocked = localStorage.getItem("jadwal_admin_locked_dates");
   
   if (storedEmployees) {
     try {
@@ -41,6 +43,14 @@ function loadFromBrowserStorage() {
       console.error("Error parsing schedules from localStorage:", e);
     }
   }
+  
+  if (storedAdminLocked) {
+    try {
+      memoryAdminLockedDates = JSON.parse(storedAdminLocked);
+    } catch (e) {
+      console.error("Error parsing admin locked dates from localStorage:", e);
+    }
+  }
 }
 
 // Save to localStorage
@@ -48,6 +58,7 @@ function saveToBrowserStorage() {
   if (typeof window === "undefined") return;
   localStorage.setItem("jadwal_employees", JSON.stringify(memoryEmployees));
   localStorage.setItem("jadwal_schedules", JSON.stringify(memorySchedules));
+  localStorage.setItem("jadwal_admin_locked_dates", JSON.stringify(memoryAdminLockedDates));
 }
 
 // Initialize database tables
@@ -73,6 +84,17 @@ async function initDatabase() {
         shift VARCHAR(10) NOT NULL,
         UNIQUE KEY unique_schedule (nik, year, month, day),
         FOREIGN KEY (nik) REFERENCES employees(nik) ON DELETE CASCADE
+      )
+    `);
+    
+    // Create admin locked dates table
+    await execute(`
+      CREATE TABLE IF NOT EXISTS admin_locked_dates (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        year INT NOT NULL,
+        month INT NOT NULL,
+        day INT NOT NULL,
+        UNIQUE KEY unique_locked_date (year, month, day)
       )
     `);
     
@@ -286,6 +308,56 @@ export async function syncEmployees(emps: Employee[]): Promise<void> {
     console.error("Error syncing employees to MySQL:", error);
     // Fallback to memory
     memoryEmployees = emps;
+    saveToBrowserStorage();
+  }
+}
+
+// Get admin locked dates (all locked days across months)
+export async function getAdminLockedDates(): Promise<Record<string, number[]>> {
+  try {
+    const rows = await query<RowDataPacket[]>(
+      "SELECT year, month, day FROM admin_locked_dates"
+    );
+    
+    const result: Record<string, number[]> = {};
+    for (const row of rows) {
+      const monthKey = `${row.year}-${String(row.month).padStart(2, "0")}`;
+      if (!result[monthKey]) {
+        result[monthKey] = [];
+      }
+      result[monthKey].push(row.day);
+    }
+    return result;
+  } catch (error) {
+    console.error("Error fetching admin locked dates from MySQL:", error);
+    // Fallback to memory
+    if (Object.keys(memoryAdminLockedDates).length === 0) {
+      loadFromBrowserStorage();
+    }
+    return memoryAdminLockedDates;
+  }
+}
+
+// Save admin locked dates (replace all)
+export async function saveAdminLockedDates(dates: Record<string, number[]>): Promise<void> {
+  try {
+    // Delete all existing locked dates
+    await execute("DELETE FROM admin_locked_dates");
+    
+    // Insert new locked dates
+    for (const [monthKey, days] of Object.entries(dates)) {
+      const [year, month] = monthKey.split("-").map(Number);
+      for (const day of days) {
+        await execute(
+          "INSERT INTO admin_locked_dates (year, month, day) VALUES (?, ?, ?)",
+          [year, month, day]
+        );
+      }
+    }
+  } catch (error) {
+    console.error("Error saving admin locked dates to MySQL:", error);
+    // Fallback to memory
+    memoryAdminLockedDates = dates;
     saveToBrowserStorage();
   }
 }
