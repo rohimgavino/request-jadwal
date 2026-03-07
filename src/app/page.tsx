@@ -186,12 +186,52 @@ export default function Home() {
     [schedule, employees]
   );
 
-  // Check if a cell is editable by the current user
+  // Indonesian National Holidays for 2026 (Tanggal Merah)
+const INDONESIAN_HOLIDAYS_2026: Record<string, string> = {
+  "1-1": "Tahun Baru Masehi",
+  "1-27": "Tahun Baru Imlek 2577",
+  "2-17": "Isra Mi'raj Nabi Muhammad SAW",
+  "3-3": "Hari Raya Nyepi 1948",
+  "3-20": "Jumat Agung",
+  "3-24": "Paskah",
+  "4-6": "Hari Raya Idulfitri 1447 H",
+  "4-7": "Hari Raya Idulfitri 1447 H",
+  "4-9": "Hari Raya Idulfitri 1447 H",
+  "5-1": "Hari Buruh Internasional",
+  "5-6": "Kenaikan Isa Almasih",
+  "5-16": "Vaisakhi",
+  "5-17": "Vaisakhi",
+  "6-1": "Hari Lahir Pancasila",
+  "6-6": "Hari Raya Iduladha 1447 H",
+  "7-7": "Tahun Baru Islam 1448 H",
+  "8-17": "Hari Kemerdekaan RI",
+  "9-7": "Maulid Nabi Muhammad SAW",
+  "10-20": "Hari的大seluruh Bangsa - Satuabadine",
+  "11-1": "Hari Santri Nasional",
+  "12-25": "Hari Raya Natal",
+  "12-31": "Malam Tahun Baru",
+};
+
+// Check if a date is an Indonesian holiday
+const isIndonesianHoliday = (day: number, month: number): { isHoliday: boolean; name: string } => {
+  const key = `${month + 1}-${day}`;
+  const holidayName = INDONESIAN_HOLIDAYS_2026[key];
+  return { isHoliday: !!holidayName, name: holidayName || "" };
+};
+
+// Check if a cell is editable by the current user
   const canEditCell = useCallback(
     (nik: string, day: number) => {
       if (loggedInAs === null) return false; // must be logged in
       // Admin can edit all rows, regular users can only edit their own row
       if (isAdmin) return true;
+      
+      // Block editing for days 1 and 2 (first 2 days of month)
+      if (day <= 2) return false;
+      
+      // Block editing for Indonesian holidays (tanggal merah)
+      const { isHoliday } = isIndonesianHoliday(day, month);
+      if (isHoliday) return false;
       
       // Calculate next month from current real-time date
       const now = new Date();
@@ -770,23 +810,36 @@ export default function Home() {
                   const clCount = getCLCountForDay(day);
                   const liburFull = liburCount >= MAX_LIBUR_PER_DAY;
                   const clFull = clCount >= MAX_CL_PER_DAY;
+                  // Check if day 1-2 or holiday (for visual indicator)
+                  const isDay12 = day <= 2;
+                  const { isHoliday, name: holidayName } = isIndonesianHoliday(day, month);
+                  const isLocked = isDay12 || isHoliday;
                   return (
                     <th
                       key={day}
                       className={`px-1 py-2 text-center font-semibold min-w-[46px] border-r border-blue-600 ${
-                        isWeekend(year, month, day) ? "bg-blue-900" : "bg-blue-700"
+                        isLocked 
+                          ? "bg-red-600 text-white" 
+                          : isWeekend(year, month, day) 
+                            ? "bg-blue-900" 
+                            : "bg-blue-700"
                       }`}
                     >
                       <div className="text-[10px] opacity-75">
                         {getDayName(year, month, day)}
                       </div>
                       <div className="text-sm">{day}</div>
-                      {liburFull && (
+                      {isLocked && (
+                        <div className="text-[9px] bg-white text-red-600 rounded px-0.5 mt-0.5 leading-tight font-bold" title={isDay12 ? "Tidak bisa edit" : holidayName}>
+                          {isDay12 ? "🔒1-2" : "🎌"}
+                        </div>
+                      )}
+                      {!isLocked && liburFull && (
                         <div className="text-[9px] bg-red-500 rounded px-0.5 mt-0.5 leading-tight">
                           🔒L
                         </div>
                       )}
-                      {clFull && !liburFull && (
+                      {!isLocked && clFull && !liburFull && (
                         <div className="text-[9px] bg-orange-500 rounded px-0.5 mt-0.5 leading-tight">
                           🔒C+L
                         </div>
@@ -867,12 +920,20 @@ export default function Home() {
                       const today = new Date();
                       const isPastDay23 = today.getDate() > 23;
                       const editable = canEditCell(emp.nik, day);
+                      // Check if day 1-2 or holiday (for visual indicator)
+                      const isDay12 = day <= 2;
+                      const { isHoliday } = isIndonesianHoliday(day, month);
+                      const isLocked = isDay12 || isHoliday;
 
                       return (
                         <td
                           key={day}
                           className={`px-0.5 py-1 text-center border-r border-gray-100 ${
-                            weekend ? "bg-orange-50" : ""
+                            isLocked 
+                              ? "bg-red-100" 
+                              : weekend 
+                                ? "bg-orange-50" 
+                                : ""
                           } ${isPastDay23 ? "bg-gray-50" : ""}`}
                         >
                           <button
