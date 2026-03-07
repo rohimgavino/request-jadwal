@@ -42,6 +42,7 @@ The template is a clean Next.js 16 starter with TypeScript and Tailwind CSS 4. I
 - [x] Migrated to local XAMPP MySQL database (replacing Supabase)
 - [x] Added edit restriction after day 23 for non-admin users
 - [x] Fixed edit restriction to use real-time date (block all editing after day 23 realtime)
+- [x] Changed edit restriction to apply only to next month - block editing after day 23 when viewing next month
 
 ## Current Structure
 
