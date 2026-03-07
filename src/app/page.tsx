@@ -193,13 +193,22 @@ export default function Home() {
       // Admin can edit all rows, regular users can only edit their own row
       if (isAdmin) return true;
       
-      // Check if real-time date is past day 23 - no editing allowed after day 23
-      const today = new Date();
-      if (today.getDate() > 23) return false;
+      // Calculate next month from current real-time date
+      const now = new Date();
+      const currentMonth = now.getMonth();
+      const currentYear = now.getFullYear();
+      const nextMonth = currentMonth === 11 ? 0 : currentMonth + 1;
+      const nextYear = currentMonth === 11 ? currentYear + 1 : currentYear;
+      
+      // Check if displayed month is the next month
+      const isNextMonth = year === nextYear && month === nextMonth;
+      
+      // If viewing next month and real-time date is past day 23 - no editing allowed
+      if (isNextMonth && now.getDate() > 23) return false;
       
       return loggedInAs === nik; // can only edit own row
     },
-    [loggedInAs, isAdmin]
+    [loggedInAs, isAdmin, year, month]
   );
 
   // A cell is locked for "L" if the day already has MAX_LIBUR_PER_DAY employees with L
