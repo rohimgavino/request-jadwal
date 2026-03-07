@@ -91,6 +91,24 @@ export default function Home() {
   // Load schedule data from database
   const [allSchedule, setAllSchedule] = useState<AllScheduleData>({});
   
+  // Admin-defined locked dates per month (keyed by YYYY-MM, value is array of locked days)
+  const [adminLockedDates, setAdminLockedDates] = useState<Record<string, number[]>>({});
+  
+  // Toggle admin locked date for current month
+  const toggleAdminLockedDate = useCallback((day: number) => {
+    const key = getMonthKey(year, month);
+    setAdminLockedDates(prev => {
+      const currentLocked = prev[key] || [];
+      if (currentLocked.includes(day)) {
+        // Unlock the day
+        return { ...prev, [key]: currentLocked.filter((d: number) => d !== day) };
+      } else {
+        // Lock the day
+        return { ...prev, [key]: [...currentLocked, day].sort((a: number, b: number) => a - b) };
+      }
+    });
+  }, [year, month]);
+  
   // Load initial data from database
   useEffect(() => {
     async function loadData() {
@@ -219,6 +237,13 @@ const isIndonesianHoliday = (day: number, month: number): { isHoliday: boolean; 
   return { isHoliday: !!holidayName, name: holidayName || "" };
 };
 
+// Check if a day is admin-locked for the current month
+const isAdminLockedDay = (day: number, month: number, year: number, adminLocked: Record<string, number[]>): boolean => {
+  const key = `${year}-${String(month + 1).padStart(2, "0")}`;
+  const lockedDays = adminLocked[key] || [];
+  return lockedDays.includes(day);
+};
+
 // Check if a cell is editable by the current user
   const canEditCell = useCallback(
     (nik: string, day: number) => {
@@ -229,9 +254,8 @@ const isIndonesianHoliday = (day: number, month: number): { isHoliday: boolean; 
       // Block editing for days 1 and 2 (first 2 days of month)
       if (day <= 2) return false;
       
-      // Block editing for Indonesian holidays (tanggal merah)
-      const { isHoliday } = isIndonesianHoliday(day, month);
-      if (isHoliday) return false;
+      // Block editing for admin-defined locked dates
+      if (isAdminLockedDay(day, month, year, adminLockedDates)) return false;
       
       // Calculate next month from current real-time date
       const now = new Date();
@@ -248,7 +272,7 @@ const isIndonesianHoliday = (day: number, month: number): { isHoliday: boolean; 
       
       return loggedInAs === nik; // can only edit own row
     },
-    [loggedInAs, isAdmin, year, month]
+    [loggedInAs, isAdmin, year, month, adminLockedDates]
   );
 
   // A cell is locked for "L" if the day already has MAX_LIBUR_PER_DAY employees with L
@@ -733,6 +757,42 @@ const isIndonesianHoliday = (day: number, month: number): { isHoliday: boolean; 
                   📂 Upload
                 </button>
               )}
+              {/* Admin lock dates control - admin only */}
+              {isAdmin && (
+                <div className="flex items-center gap-1">
+                  <span className="text-xs text-white/80">Kunci:</span>
+                  <input
+                    type="number"
+                    min="3"
+                    max="31"
+                    placeholder="tgl"
+                    className="w-12 px-1 py-1 text-xs rounded border border-white/30 bg-white/10 text-white placeholder-white/50"
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") {
+                        const day = parseInt((e.target as HTMLInputElement).value);
+                        if (day >= 3 && day <= daysInMonth) {
+                          toggleAdminLockedDate(day);
+                          (e.target as HTMLInputElement).value = "";
+                        }
+                      }
+                    }}
+                  />
+                  <button
+                    onClick={() => {
+                      const input = document.querySelector('input[placeholder="tgl"]') as HTMLInputElement;
+                      const day = parseInt(input?.value || "0");
+                      if (day >= 3 && day <= daysInMonth) {
+                        toggleAdminLockedDate(day);
+                        input.value = "";
+                      }
+                    }}
+                    className="bg-red-500 hover:bg-red-400 px-2 py-1 rounded text-xs font-semibold"
+                    title="Klik/tulis tanggal lalu enter untuk lock/unlock"
+                  >
+                    🔒
+                  </button>
+                </div>
+              )}
               {/* Login status */}
               {loginStatus ? (
                 <div className="flex items-center gap-2">
@@ -810,28 +870,30 @@ const isIndonesianHoliday = (day: number, month: number): { isHoliday: boolean; 
                   const clCount = getCLCountForDay(day);
                   const liburFull = liburCount >= MAX_LIBUR_PER_DAY;
                   const clFull = clCount >= MAX_CL_PER_DAY;
-                  // Check if day 1-2 or holiday (for visual indicator)
+                  // Check if day 1-2 or admin-locked (for visual indicator)
                   const isDay12 = day <= 2;
-                  const { isHoliday, name: holidayName } = isIndonesianHoliday(day, month);
-                  const isLocked = isDay12 || isHoliday;
+                  const isAdminLocked = isAdminLockedDay(day, month, year, adminLockedDates);
+                  const isLocked = isDay12 || isAdminLocked;
                   return (
                     <th
                       key={day}
+                      onClick={isAdmin && day > 2 ? () => toggleAdminLockedDate(day) : undefined}
                       className={`px-1 py-2 text-center font-semibold min-w-[46px] border-r border-blue-600 ${
                         isLocked 
                           ? "bg-red-600 text-white" 
                           : isWeekend(year, month, day) 
                             ? "bg-blue-900" 
                             : "bg-blue-700"
-                      }`}
+                      } ${isAdmin && day > 2 ? "cursor-pointer hover:opacity-80" : ""}`}
+                      title={isAdmin && day > 2 ? (isAdminLocked ? "Klik untuk membuka kunci" : "Klik untuk mengunci") : undefined}
                     >
                       <div className="text-[10px] opacity-75">
                         {getDayName(year, month, day)}
                       </div>
                       <div className="text-sm">{day}</div>
                       {isLocked && (
-                        <div className="text-[9px] bg-white text-red-600 rounded px-0.5 mt-0.5 leading-tight font-bold" title={isDay12 ? "Tidak bisa edit" : holidayName}>
-                          {isDay12 ? "🔒1-2" : "🎌"}
+                        <div className="text-[9px] bg-white text-red-600 rounded px-0.5 mt-0.5 leading-tight font-bold" title={isDay12 ? "Tidak bisa edit" : (isAdminLocked ? "Dikunci admin" : "")}>
+                          {isDay12 ? "🔒1-2" : "🔒"}
                         </div>
                       )}
                       {!isLocked && liburFull && (
@@ -920,10 +982,10 @@ const isIndonesianHoliday = (day: number, month: number): { isHoliday: boolean; 
                       const today = new Date();
                       const isPastDay23 = today.getDate() > 23;
                       const editable = canEditCell(emp.nik, day);
-                      // Check if day 1-2 or holiday (for visual indicator)
+                      // Check if day 1-2 or admin-locked (for visual indicator)
                       const isDay12 = day <= 2;
-                      const { isHoliday } = isIndonesianHoliday(day, month);
-                      const isLocked = isDay12 || isHoliday;
+                      const isAdminLocked = isAdminLockedDay(day, month, year, adminLockedDates);
+                      const isLocked = isDay12 || isAdminLocked;
 
                       return (
                         <td
