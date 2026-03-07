@@ -182,10 +182,14 @@ export default function Home() {
 
   // Check if a cell is editable by the current user
   const canEditCell = useCallback(
-    (nik: string) => {
+    (nik: string, day: number) => {
       if (loggedInAs === null) return false; // must be logged in
       // Admin can edit all rows, regular users can only edit their own row
       if (isAdmin) return true;
+      
+      // Check if day is 23 or later - no editing allowed after day 23
+      if (day >= 23) return false;
+      
       return loggedInAs === nik; // can only edit own row
     },
     [loggedInAs, isAdmin]
@@ -215,7 +219,7 @@ export default function Home() {
 
   const handleCellClick = useCallback(
     async (nik: string, day: number) => {
-      if (!canEditCell(nik)) return;
+      if (!canEditCell(nik, day)) return;
 
       const currentVal = schedule[nik]?.[day] || "";
       const currentIndex = SHIFT_OPTIONS.indexOf(currentVal);
@@ -783,7 +787,7 @@ export default function Home() {
               {employees.map((emp, empIdx) => {
                 const empSummary = getEmployeeSummary(emp.nik);
                 const isMyRow = loggedInAs === emp.nik;
-                const canEdit = canEditCell(emp.nik);
+                const canEdit = canEditCell(emp.nik, 1);
                 return (
                   <tr
                     key={emp.nik}
@@ -841,14 +845,15 @@ export default function Home() {
                       const lockedForLibur = isDayLockedForLibur(emp.nik, day);
                       const lockedForCL = isDayLockedForCL(emp.nik, day, "C");
                       const weekend = isWeekend(year, month, day);
-                      const editable = canEdit;
+                      const isDay23Plus = day >= 23;
+                      const editable = canEditCell(emp.nik, day);
 
                       return (
                         <td
                           key={day}
                           className={`px-0.5 py-1 text-center border-r border-gray-100 ${
                             weekend ? "bg-orange-50" : ""
-                          }`}
+                          } ${isDay23Plus ? "bg-gray-50" : ""}`}
                         >
                           <button
                             onClick={() => handleCellClick(emp.nik, day)}
@@ -860,11 +865,15 @@ export default function Home() {
                             } ${
                               val
                                 ? SHIFT_COLORS[val]
+                                : isDay23Plus
+                                ? "bg-gray-200 text-gray-400 border-2 border-dashed border-gray-300"
                                 : "bg-gray-100 text-gray-400 hover:bg-gray-200"
                             }`}
                             title={
                               !editable
-                                ? `Login terlebih dahulu untuk mengedit`
+                                ? isDay23Plus
+                                  ? "Tidak dapat edit setelah tanggal 23"
+                                  : `Login terlebih dahulu untuk mengedit`
                                 : lockedForLibur && !val
                                 ? `${emp.name} - ${day}: L terkunci (maks ${MAX_LIBUR_PER_DAY} orang)`
                                 : lockedForCL && !val
