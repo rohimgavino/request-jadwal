@@ -43,6 +43,7 @@ The template is a clean Next.js 16 starter with TypeScript and Tailwind CSS 4. I
 - [x] Added edit restriction after day 23 for non-admin users
 - [x] Fixed edit restriction to use real-time date (block all editing after day 23 realtime)
 - [x] Added auto-delete for last month's schedule data on app startup (save storage)
+- [x] Added deadline warning display - batas input jadwal tanggal 23 setiap bulan
 
 ## Current Structure
 
