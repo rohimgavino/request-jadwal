@@ -672,6 +672,9 @@ export default function Home() {
               <p className="text-blue-200 text-sm mt-0.5">
                 Klik sel untuk mengubah shift • L maks {MAX_LIBUR_PER_DAY}/hari • C+L maks {MAX_CL_PER_DAY}/hari
               </p>
+              <p className="text-yellow-300 text-sm mt-1 font-semibold">
+                ⚠️ Batas input request jadwal: tanggal 23 setiap bulan
+              </p>
             </div>
             <div className="flex items-center gap-3 flex-wrap">
               {/* Export Excel - always visible in header */}
