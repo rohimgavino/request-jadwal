@@ -148,11 +148,8 @@ export async function addEmployee(emp: Employee): Promise<void> {
       memoryEmployees.push(emp);
       saveToBrowserStorage();
     }
-    throw error;
   }
 }
-
-// Update employee password
 export async function updateEmployeePassword(nik: string, newPassword: string): Promise<void> {
   try {
     await execute(
@@ -167,7 +164,6 @@ export async function updateEmployeePassword(nik: string, newPassword: string): 
       emp.password = newPassword;
       saveToBrowserStorage();
     }
-    throw error;
   }
 }
 
@@ -265,7 +261,7 @@ export async function updateSchedule(
       delete memorySchedules[monthKey][nik][day];
     }
     saveToBrowserStorage();
-    throw error;
+    // Don't throw error - fallback to localStorage succeeded
   }
 }
 
@@ -291,7 +287,6 @@ export async function syncEmployees(emps: Employee[]): Promise<void> {
     // Fallback to memory
     memoryEmployees = emps;
     saveToBrowserStorage();
-    throw error;
   }
 }
 
