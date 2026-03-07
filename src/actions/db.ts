@@ -76,9 +76,38 @@ async function initDatabase() {
       )
     `);
     
+    // Auto-delete last month's schedules to save storage
+    await cleanupOldSchedules();
+    
     console.log("Database tables initialized successfully");
   } catch (error) {
     console.error("Error initializing database:", error);
+  }
+}
+
+// Delete schedules from last month and older
+async function cleanupOldSchedules() {
+  const now = new Date();
+  const currentMonth = now.getMonth(); // 0-11
+  const currentYear = now.getFullYear();
+  
+  // Calculate last month
+  let lastMonth = currentMonth - 1;
+  let lastMonthYear = currentYear;
+  if (lastMonth < 0) {
+    lastMonth = 11;
+    lastMonthYear = currentYear - 1;
+  }
+  
+  // Delete all schedules from last month or earlier
+  try {
+    const result = await execute(
+      "DELETE FROM schedules WHERE (year < ?) OR (year = ? AND month <= ?)",
+      [lastMonthYear, lastMonthYear, lastMonth]
+    );
+    console.log("Old schedules cleaned up successfully");
+  } catch (error) {
+    console.error("Error cleaning up old schedules:", error);
   }
 }
 
