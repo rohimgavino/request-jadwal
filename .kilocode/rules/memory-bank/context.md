@@ -40,6 +40,7 @@ The template is a clean Next.js 16 starter with TypeScript and Tailwind CSS 4. I
 - [x] Configured Supabase credentials - added .env.local with user's credentials
 - [x] CSV upload and schedule input now directly saved to Supabase database
 - [x] Migrated to local XAMPP MySQL database (replacing Supabase)
+- [x] Added edit restriction after day 23 for non-admin users
 
 ## Current Structure
 
