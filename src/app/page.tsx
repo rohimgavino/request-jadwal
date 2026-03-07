@@ -187,8 +187,9 @@ export default function Home() {
       // Admin can edit all rows, regular users can only edit their own row
       if (isAdmin) return true;
       
-      // Check if day is 23 or later - no editing allowed after day 23
-      if (day >= 23) return false;
+      // Check if real-time date is past day 23 - no editing allowed after day 23
+      const today = new Date();
+      if (today.getDate() > 23) return false;
       
       return loggedInAs === nik; // can only edit own row
     },
@@ -845,7 +846,8 @@ export default function Home() {
                       const lockedForLibur = isDayLockedForLibur(emp.nik, day);
                       const lockedForCL = isDayLockedForCL(emp.nik, day, "C");
                       const weekend = isWeekend(year, month, day);
-                      const isDay23Plus = day >= 23;
+                      const today = new Date();
+                      const isPastDay23 = today.getDate() > 23;
                       const editable = canEditCell(emp.nik, day);
 
                       return (
@@ -853,7 +855,7 @@ export default function Home() {
                           key={day}
                           className={`px-0.5 py-1 text-center border-r border-gray-100 ${
                             weekend ? "bg-orange-50" : ""
-                          } ${isDay23Plus ? "bg-gray-50" : ""}`}
+                          } ${isPastDay23 ? "bg-gray-50" : ""}`}
                         >
                           <button
                             onClick={() => handleCellClick(emp.nik, day)}
@@ -865,13 +867,13 @@ export default function Home() {
                             } ${
                               val
                                 ? SHIFT_COLORS[val]
-                                : isDay23Plus
+                                : isPastDay23
                                 ? "bg-gray-200 text-gray-400 border-2 border-dashed border-gray-300"
                                 : "bg-gray-100 text-gray-400 hover:bg-gray-200"
                             }`}
                             title={
                               !editable
-                                ? isDay23Plus
+                                ? isPastDay23
                                   ? "Tidak dapat edit setelah tanggal 23"
                                   : `Login terlebih dahulu untuk mengedit`
                                 : lockedForLibur && !val
