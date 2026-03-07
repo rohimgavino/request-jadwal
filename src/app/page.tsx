@@ -1102,15 +1102,24 @@ const isAdminLockedDay = (day: number, month: number, year: number, adminLocked:
                       </div>
                     </td>
                     
-                    {/* Notes button */}
+                    {/* Notes button - only owner or admin can click */}
                     <td className="px-1 py-1 text-center border-r border-gray-200">
-                      <button
-                        onClick={() => openNotesModal(emp.nik, emp.name)}
-                        className={`text-lg hover:scale-110 transition ${employeeNotes[monthKey]?.[emp.nik] ? "text-yellow-500" : "text-gray-400"}`}
-                        title="Tambah catatan"
-                      >
-                        📝
-                      </button>
+                      {(isAdmin || loggedInAs === emp.nik) ? (
+                        <button
+                          onClick={() => openNotesModal(emp.nik, emp.name)}
+                          className={`text-lg hover:scale-110 transition ${employeeNotes[monthKey]?.[emp.nik] ? "text-yellow-500" : "text-gray-400"}`}
+                          title="Tambah catatan"
+                        >
+                          📝
+                        </button>
+                      ) : (
+                        <span
+                          className={`text-lg ${employeeNotes[monthKey]?.[emp.nik] ? "text-yellow-500" : "text-gray-300"}`}
+                          title="Hanya bisa menambah catatan sendiri"
+                        >
+                          📝
+                        </span>
+                      )}
                     </td>
 
                     {/* Action */}
