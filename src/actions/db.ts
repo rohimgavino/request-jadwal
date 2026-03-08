@@ -289,8 +289,10 @@ export async function updateSchedule(
       
       if (error) throw error;
     }
-  } catch (error) {
+  } catch (error: any) {
     console.error("Error updating schedule in Supabase:", error);
+    const errorMsg = error?.message || error?.details || JSON.stringify(error);
+    // Fallback to localStorage
     const monthKey = `${year}-${String(month).padStart(2, "0")}`;
     if (!memorySchedules[monthKey]) memorySchedules[monthKey] = {};
     if (!memorySchedules[monthKey][nik]) memorySchedules[monthKey][nik] = {};
@@ -301,6 +303,7 @@ export async function updateSchedule(
       delete memorySchedules[monthKey][nik][day];
     }
     saveToBrowserStorage();
+    throw new Error(`Supabase error: ${errorMsg}. Data disimpan di browser storage.`);
   }
 }
 

@@ -407,8 +407,9 @@ const isAdminLockedDay = (day: number, month: number, year: number, adminLocked:
       // Persist to database
       try {
         await updateSchedule(nik, year, month, day, newShift);
-      } catch (error) {
+      } catch (error: any) {
         console.error("Failed to update schedule:", error);
+        alert(`Gagal menyimpan: ${error?.message || error}. Cek console untuk detail.`);
         // Revert on error
         setAllSchedule((prev) => ({
           ...prev,
