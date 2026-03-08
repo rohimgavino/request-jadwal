@@ -184,6 +184,38 @@ export default function Home() {
     }
     loadData();
   }, []);
+
+  // Real-time polling - refresh data every 5 seconds to detect changes from other users
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  
+  useEffect(() => {
+    const POLL_INTERVAL = 5000; // 5 seconds
+    
+    const pollData = async () => {
+      if (isRefreshing) return; // Skip if already refreshing
+      setIsRefreshing(true);
+      
+      try {
+        const [scheds, lockedDates, notes] = await Promise.all([
+          getAllSchedules(),
+          getAdminLockedDates(),
+          getEmployeeNotes()
+        ]);
+        
+        setAllSchedule(scheds);
+        setAdminLockedDates(lockedDates);
+        setEmployeeNotes(notes);
+      } catch (error) {
+        console.error("Polling error:", error);
+      } finally {
+        setIsRefreshing(false);
+      }
+    };
+    
+    const intervalId = setInterval(pollData, POLL_INTERVAL);
+    
+    return () => clearInterval(intervalId);
+  }, [isRefreshing]);
   
   // Add employee form
   const [newEmpName, setNewEmpName] = useState("");
