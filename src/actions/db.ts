@@ -1,7 +1,6 @@
 "use server";
 
-import { query, execute, testConnection, isConfigured } from "@/db";
-import { RowDataPacket, ResultSetHeader } from "mysql2/promise";
+import { getSupabase, isConfigured } from "@/db";
 
 // Employee types
 export type Employee = {
@@ -15,7 +14,7 @@ type MonthSchedule = Record<number, string>; // day -> shift
 type AllScheduleData = Record<string, Record<string, MonthSchedule>>; // monthKey -> nik -> day -> shift
 export type ScheduleData = Record<string, Record<number, string>>;
 
-// In-memory fallback when MySQL is not available
+// In-memory fallback when Supabase is not available
 let memoryEmployees: Employee[] = [];
 let memorySchedules: Record<string, Record<string, Record<number, string>>> = {};
 let memoryAdminLockedDates: Record<string, number[]> = {}; // monthKey -> [days]
@@ -72,107 +71,30 @@ function saveToBrowserStorage() {
   localStorage.setItem("jadwal_employee_notes", JSON.stringify(memoryEmployeeNotes));
 }
 
-// Initialize database tables
-async function initDatabase() {
-  try {
-    // Create employees table
-    await execute(`
-      CREATE TABLE IF NOT EXISTS employees (
-        nik VARCHAR(50) PRIMARY KEY,
-        name VARCHAR(255) NOT NULL,
-        password VARCHAR(255) NOT NULL
-      )
-    `);
-    
-    // Create schedules table
-    await execute(`
-      CREATE TABLE IF NOT EXISTS schedules (
-        id INT AUTO_INCREMENT PRIMARY KEY,
-        nik VARCHAR(50) NOT NULL,
-        year INT NOT NULL,
-        month INT NOT NULL,
-        day INT NOT NULL,
-        shift VARCHAR(10) NOT NULL,
-        UNIQUE KEY unique_schedule (nik, year, month, day),
-        FOREIGN KEY (nik) REFERENCES employees(nik) ON DELETE CASCADE
-      )
-    `);
-    
-    // Create admin locked dates table
-    await execute(`
-      CREATE TABLE IF NOT EXISTS admin_locked_dates (
-        id INT AUTO_INCREMENT PRIMARY KEY,
-        year INT NOT NULL,
-        month INT NOT NULL,
-        day INT NOT NULL,
-        UNIQUE KEY unique_locked_date (year, month, day)
-      )
-    `);
-    
-    // Create employee notes table
-    await execute(`
-      CREATE TABLE IF NOT EXISTS employee_notes (
-        id INT AUTO_INCREMENT PRIMARY KEY,
-        nik VARCHAR(50) NOT NULL,
-        year INT NOT NULL,
-        month INT NOT NULL,
-        note TEXT,
-        UNIQUE KEY unique_note (nik, year, month),
-        FOREIGN KEY (nik) REFERENCES employees(nik) ON DELETE CASCADE
-      )
-    `);
-    
-    // Auto-delete last month's schedules to save storage
-    await cleanupOldSchedules();
-    
-    console.log("Database tables initialized successfully");
-  } catch (error) {
-    console.error("Error initializing database:", error);
-  }
-}
-
-// Delete schedules from last month and older
-async function cleanupOldSchedules() {
-  const now = new Date();
-  const currentMonth = now.getMonth(); // 0-11
-  const currentYear = now.getFullYear();
-  
-  // Calculate last month
-  let lastMonth = currentMonth - 1;
-  let lastMonthYear = currentYear;
-  if (lastMonth < 0) {
-    lastMonth = 11;
-    lastMonthYear = currentYear - 1;
-  }
-  
-  // Delete all schedules from last month or earlier
-  try {
-    const result = await execute(
-      "DELETE FROM schedules WHERE (year < ?) OR (year = ? AND month <= ?)",
-      [lastMonthYear, lastMonthYear, lastMonth]
-    );
-    console.log("Old schedules cleaned up successfully");
-  } catch (error) {
-    console.error("Error cleaning up old schedules:", error);
-  }
-}
-
-// Initialize on first import
-initDatabase().catch(console.error);
-
 // Get all employees
 export async function getEmployees(): Promise<Employee[]> {
-  // Try database first, fallback to memory
+  if (!isConfigured) {
+    if (memoryEmployees.length === 0) {
+      loadFromBrowserStorage();
+    }
+    return memoryEmployees;
+  }
+  
   try {
-    const rows = await query<RowDataPacket[]>("SELECT nik, name, password FROM employees");
-    return rows.map(row => ({
+    const supabase = getSupabase();
+    const { data, error } = await supabase
+      .from("employees")
+      .select("nik, name, password");
+    
+    if (error) throw error;
+    
+    return data.map(row => ({
       nik: row.nik,
       name: row.name,
       password: row.password
     }));
   } catch (error) {
-    console.error("Error fetching employees from MySQL:", error);
-    // Fallback to memory
+    console.error("Error fetching employees from Supabase:", error);
     if (memoryEmployees.length === 0) {
       loadFromBrowserStorage();
     }
@@ -182,29 +104,50 @@ export async function getEmployees(): Promise<Employee[]> {
 
 // Add a new employee
 export async function addEmployee(emp: Employee): Promise<void> {
+  if (!isConfigured) {
+    if (!memoryEmployees.find(e => e.nik === emp.nik)) {
+      memoryEmployees.push(emp);
+      saveToBrowserStorage();
+    }
+    return;
+  }
+  
   try {
-    await execute(
-      "INSERT INTO employees (nik, name, password) VALUES (?, ?, ?)",
-      [emp.nik, emp.name, emp.password]
-    );
+    const supabase = getSupabase();
+    const { error } = await supabase
+      .from("employees")
+      .insert([{ nik: emp.nik, name: emp.name, password: emp.password }]);
+    
+    if (error) throw error;
   } catch (error) {
-    console.error("Error adding employee to MySQL:", error);
-    // Fallback to memory
+    console.error("Error adding employee to Supabase:", error);
     if (!memoryEmployees.find(e => e.nik === emp.nik)) {
       memoryEmployees.push(emp);
       saveToBrowserStorage();
     }
   }
 }
+
 export async function updateEmployeePassword(nik: string, newPassword: string): Promise<void> {
+  if (!isConfigured) {
+    const emp = memoryEmployees.find(e => e.nik === nik);
+    if (emp) {
+      emp.password = newPassword;
+      saveToBrowserStorage();
+    }
+    return;
+  }
+  
   try {
-    await execute(
-      "UPDATE employees SET password = ? WHERE nik = ?",
-      [newPassword, nik]
-    );
+    const supabase = getSupabase();
+    const { error } = await supabase
+      .from("employees")
+      .update({ password: newPassword })
+      .eq("nik", nik);
+    
+    if (error) throw error;
   } catch (error) {
-    console.error("Error updating password in MySQL:", error);
-    // Fallback to memory
+    console.error("Error updating password in Supabase:", error);
     const emp = memoryEmployees.find(e => e.nik === nik);
     if (emp) {
       emp.password = newPassword;
@@ -215,16 +158,28 @@ export async function updateEmployeePassword(nik: string, newPassword: string): 
 
 // Remove an employee
 export async function removeEmployee(nik: string): Promise<void> {
-  try {
-    // Delete schedules first (due to foreign key)
-    await execute("DELETE FROM schedules WHERE nik = ?", [nik]);
-    // Delete employee
-    await execute("DELETE FROM employees WHERE nik = ?", [nik]);
-  } catch (error) {
-    console.error("Error removing employee from MySQL:", error);
-    // Fallback to memory
+  if (!isConfigured) {
     memoryEmployees = memoryEmployees.filter(e => e.nik !== nik);
-    // Also remove from schedules
+    Object.keys(memorySchedules).forEach(monthKey => {
+      if (memorySchedules[monthKey][nik]) {
+        delete memorySchedules[monthKey][nik];
+      }
+    });
+    saveToBrowserStorage();
+    return;
+  }
+  
+  try {
+    const supabase = getSupabase();
+    const { error } = await supabase
+      .from("employees")
+      .delete()
+      .eq("nik", nik);
+    
+    if (error) throw error;
+  } catch (error) {
+    console.error("Error removing employee from Supabase:", error);
+    memoryEmployees = memoryEmployees.filter(e => e.nik !== nik);
     Object.keys(memorySchedules).forEach(monthKey => {
       if (memorySchedules[monthKey][nik]) {
         delete memorySchedules[monthKey][nik];
@@ -237,14 +192,24 @@ export async function removeEmployee(nik: string): Promise<void> {
 
 // Get all schedules (all months)
 export async function getAllSchedules(): Promise<Record<string, Record<string, Record<number, string>>>> {
+  if (!isConfigured) {
+    if (Object.keys(memorySchedules).length === 0) {
+      loadFromBrowserStorage();
+    }
+    return memorySchedules;
+  }
+  
   try {
-    const rows = await query<RowDataPacket[]>(
-      "SELECT nik, year, month, day, shift FROM schedules"
-    );
+    const supabase = getSupabase();
+    const { data, error } = await supabase
+      .from("schedules")
+      .select("nik, year, month, day, shift");
+    
+    if (error) throw error;
     
     const allSchedules: Record<string, Record<string, Record<number, string>>> = {};
-    for (const row of rows) {
-      const monthKey = `${row.year}-${String(row.month + 1).padStart(2, "0")}`;
+    for (const row of data) {
+      const monthKey = `${row.year}-${String(row.month).padStart(2, "0")}`;
       if (!allSchedules[monthKey]) {
         allSchedules[monthKey] = {};
       }
@@ -255,8 +220,7 @@ export async function getAllSchedules(): Promise<Record<string, Record<string, R
     }
     return allSchedules;
   } catch (error) {
-    console.error("Error fetching schedules from MySQL:", error);
-    // Fallback to memory
+    console.error("Error fetching schedules from Supabase:", error);
     if (Object.keys(memorySchedules).length === 0) {
       loadFromBrowserStorage();
     }
@@ -272,32 +236,8 @@ export async function updateSchedule(
   day: number,
   shift: string
 ): Promise<void> {
-  try {
-    // Check if entry exists
-    const existing = await query<RowDataPacket[]>(
-      "SELECT id FROM schedules WHERE nik = ? AND year = ? AND month = ? AND day = ?",
-      [nik, year, month, day]
-    );
-    
-    if (existing.length > 0) {
-      if (shift) {
-        await execute(
-          "UPDATE schedules SET shift = ? WHERE id = ?",
-          [shift, existing[0].id]
-        );
-      } else {
-        await execute("DELETE FROM schedules WHERE id = ?", [existing[0].id]);
-      }
-    } else if (shift) {
-      await execute(
-        "INSERT INTO schedules (nik, year, month, day, shift) VALUES (?, ?, ?, ?, ?)",
-        [nik, year, month, day, shift]
-      );
-    }
-  } catch (error) {
-    console.error("Error updating schedule in MySQL:", error);
-    // Fallback to memory
-    const monthKey = `${year}-${String(month + 1).padStart(2, "0")}`;
+  if (!isConfigured) {
+    const monthKey = `${year}-${String(month).padStart(2, "0")}`;
     if (!memorySchedules[monthKey]) memorySchedules[monthKey] = {};
     if (!memorySchedules[monthKey][nik]) memorySchedules[monthKey][nik] = {};
     
@@ -307,30 +247,97 @@ export async function updateSchedule(
       delete memorySchedules[monthKey][nik][day];
     }
     saveToBrowserStorage();
-    // Don't throw error - fallback to localStorage succeeded
+    return;
+  }
+  
+  try {
+    const supabase = getSupabase();
+    
+    // First check if entry exists
+    const { data: existing } = await supabase
+      .from("schedules")
+      .select("id")
+      .eq("nik", nik)
+      .eq("year", year)
+      .eq("month", month)
+      .eq("day", day)
+      .maybeSingle();
+    
+    if (existing) {
+      if (shift) {
+        const { error } = await supabase
+          .from("schedules")
+          .update({ shift })
+          .eq("id", existing.id);
+        
+        if (error) throw error;
+      } else {
+        const { error } = await supabase
+          .from("schedules")
+          .delete()
+          .eq("id", existing.id);
+        
+        if (error) throw error;
+      }
+    } else if (shift) {
+      const { error } = await supabase
+        .from("schedules")
+        .insert([{ nik, year, month, day, shift }]);
+      
+      if (error) throw error;
+    }
+  } catch (error) {
+    console.error("Error updating schedule in Supabase:", error);
+    const monthKey = `${year}-${String(month).padStart(2, "0")}`;
+    if (!memorySchedules[monthKey]) memorySchedules[monthKey] = {};
+    if (!memorySchedules[monthKey][nik]) memorySchedules[monthKey][nik] = {};
+    
+    if (shift) {
+      memorySchedules[monthKey][nik][day] = shift;
+    } else {
+      delete memorySchedules[monthKey][nik][day];
+    }
+    saveToBrowserStorage();
   }
 }
 
 // Bulk sync employees (replace all)
 export async function syncEmployees(emps: Employee[]): Promise<void> {
+  if (!isConfigured) {
+    memoryEmployees = emps;
+    saveToBrowserStorage();
+    return;
+  }
+  
   try {
+    const supabase = getSupabase();
+    
     // Delete all employees first
-    await execute("DELETE FROM employees");
+    const { error: deleteError } = await supabase
+      .from("employees")
+      .delete()
+      .neq("nik", "");
+    
+    if (deleteError) throw deleteError;
+    
     // Delete all schedules
-    await execute("DELETE FROM schedules");
+    const { error: deleteSchedulesError } = await supabase
+      .from("schedules")
+      .delete()
+      .neq("nik", "");
+    
+    if (deleteSchedulesError) throw deleteSchedulesError;
     
     // Insert new employees
     if (emps.length > 0) {
-      for (const emp of emps) {
-        await execute(
-          "INSERT INTO employees (nik, name, password) VALUES (?, ?, ?)",
-          [emp.nik, emp.name, emp.password]
-        );
-      }
+      const { error } = await supabase
+        .from("employees")
+        .insert(emps.map(emp => ({ nik: emp.nik, name: emp.name, password: emp.password })));
+      
+      if (error) throw error;
     }
   } catch (error) {
-    console.error("Error syncing employees to MySQL:", error);
-    // Fallback to memory
+    console.error("Error syncing employees to Supabase:", error);
     memoryEmployees = emps;
     saveToBrowserStorage();
   }
@@ -338,13 +345,23 @@ export async function syncEmployees(emps: Employee[]): Promise<void> {
 
 // Get admin locked dates (all locked days across months)
 export async function getAdminLockedDates(): Promise<Record<string, number[]>> {
+  if (!isConfigured) {
+    if (Object.keys(memoryAdminLockedDates).length === 0) {
+      loadFromBrowserStorage();
+    }
+    return memoryAdminLockedDates;
+  }
+  
   try {
-    const rows = await query<RowDataPacket[]>(
-      "SELECT year, month, day FROM admin_locked_dates"
-    );
+    const supabase = getSupabase();
+    const { data, error } = await supabase
+      .from("admin_locked_dates")
+      .select("year, month, day");
+    
+    if (error) throw error;
     
     const result: Record<string, number[]> = {};
-    for (const row of rows) {
+    for (const row of data) {
       const monthKey = `${row.year}-${String(row.month).padStart(2, "0")}`;
       if (!result[monthKey]) {
         result[monthKey] = [];
@@ -353,8 +370,7 @@ export async function getAdminLockedDates(): Promise<Record<string, number[]>> {
     }
     return result;
   } catch (error) {
-    console.error("Error fetching admin locked dates from MySQL:", error);
-    // Fallback to memory
+    console.error("Error fetching admin locked dates from Supabase:", error);
     if (Object.keys(memoryAdminLockedDates).length === 0) {
       loadFromBrowserStorage();
     }
@@ -364,23 +380,41 @@ export async function getAdminLockedDates(): Promise<Record<string, number[]>> {
 
 // Save admin locked dates (replace all)
 export async function saveAdminLockedDates(dates: Record<string, number[]>): Promise<void> {
+  if (!isConfigured) {
+    memoryAdminLockedDates = dates;
+    saveToBrowserStorage();
+    return;
+  }
+  
   try {
+    const supabase = getSupabase();
+    
     // Delete all existing locked dates
-    await execute("DELETE FROM admin_locked_dates");
+    const { error: deleteError } = await supabase
+      .from("admin_locked_dates")
+      .delete()
+      .neq("id", 0);
+    
+    if (deleteError) throw deleteError;
     
     // Insert new locked dates
+    const lockedDatesToInsert: { year: number; month: number; day: number }[] = [];
     for (const [monthKey, days] of Object.entries(dates)) {
       const [year, month] = monthKey.split("-").map(Number);
       for (const day of days) {
-        await execute(
-          "INSERT INTO admin_locked_dates (year, month, day) VALUES (?, ?, ?)",
-          [year, month, day]
-        );
+        lockedDatesToInsert.push({ year, month, day });
       }
     }
+    
+    if (lockedDatesToInsert.length > 0) {
+      const { error } = await supabase
+        .from("admin_locked_dates")
+        .insert(lockedDatesToInsert);
+      
+      if (error) throw error;
+    }
   } catch (error) {
-    console.error("Error saving admin locked dates to MySQL:", error);
-    // Fallback to memory
+    console.error("Error saving admin locked dates to Supabase:", error);
     memoryAdminLockedDates = dates;
     saveToBrowserStorage();
   }
@@ -388,13 +422,24 @@ export async function saveAdminLockedDates(dates: Record<string, number[]>): Pro
 
 // Get employee notes (all notes across months)
 export async function getEmployeeNotes(): Promise<Record<string, Record<string, string>>> {
+  if (!isConfigured) {
+    if (Object.keys(memoryEmployeeNotes).length === 0) {
+      loadFromBrowserStorage();
+    }
+    return memoryEmployeeNotes;
+  }
+  
   try {
-    const rows = await query<RowDataPacket[]>(
-      "SELECT nik, year, month, note FROM employee_notes WHERE note IS NOT NULL AND note <> ''"
-    );
+    const supabase = getSupabase();
+    const { data, error } = await supabase
+      .from("employee_notes")
+      .select("nik, year, month, note")
+      .neq("note", "");
+    
+    if (error) throw error;
     
     const result: Record<string, Record<string, string>> = {};
-    for (const row of rows) {
+    for (const row of data) {
       const monthKey = `${row.year}-${String(row.month).padStart(2, "0")}`;
       if (!result[monthKey]) {
         result[monthKey] = {};
@@ -403,8 +448,7 @@ export async function getEmployeeNotes(): Promise<Record<string, Record<string, 
     }
     return result;
   } catch (error) {
-    console.error("Error fetching employee notes from MySQL:", error);
-    // Fallback to memory
+    console.error("Error fetching employee notes from Supabase:", error);
     if (Object.keys(memoryEmployeeNotes).length === 0) {
       loadFromBrowserStorage();
     }
@@ -414,25 +458,43 @@ export async function getEmployeeNotes(): Promise<Record<string, Record<string, 
 
 // Save employee notes (replace all)
 export async function saveEmployeeNotes(notes: Record<string, Record<string, string>>): Promise<void> {
+  if (!isConfigured) {
+    memoryEmployeeNotes = notes;
+    saveToBrowserStorage();
+    return;
+  }
+  
   try {
+    const supabase = getSupabase();
+    
     // Delete all existing notes
-    await execute("DELETE FROM employee_notes");
+    const { error: deleteError } = await supabase
+      .from("employee_notes")
+      .delete()
+      .neq("id", 0);
+    
+    if (deleteError) throw deleteError;
     
     // Insert new notes
+    const notesToInsert: { nik: string; year: number; month: number; note: string }[] = [];
     for (const [monthKey, nikNotes] of Object.entries(notes)) {
       const [year, month] = monthKey.split("-").map(Number);
       for (const [nik, note] of Object.entries(nikNotes)) {
         if (note && note.trim()) {
-          await execute(
-            "INSERT INTO employee_notes (nik, year, month, note) VALUES (?, ?, ?, ?)",
-            [nik, year, month, note]
-          );
+          notesToInsert.push({ nik, year, month, note });
         }
       }
     }
+    
+    if (notesToInsert.length > 0) {
+      const { error } = await supabase
+        .from("employee_notes")
+        .insert(notesToInsert);
+      
+      if (error) throw error;
+    }
   } catch (error) {
-    console.error("Error saving employee notes to MySQL:", error);
-    // Fallback to memory
+    console.error("Error saving employee notes to Supabase:", error);
     memoryEmployeeNotes = notes;
     saveToBrowserStorage();
   }
@@ -445,21 +507,27 @@ export async function validateLogin(nik: string, password: string): Promise<Empl
     return { nik: "ADMIN", name: "Administrator", password: "admin123" };
   }
   
+  if (!isConfigured) {
+    const emp = memoryEmployees.find(e => e.nik === nik);
+    return emp && emp.password === password ? emp : null;
+  }
+  
   try {
-    const rows = await query<RowDataPacket[]>(
-      "SELECT nik, name, password FROM employees WHERE nik = ?",
-      [nik]
-    );
+    const supabase = getSupabase();
+    const { data, error } = await supabase
+      .from("employees")
+      .select("nik, name, password")
+      .eq("nik", nik)
+      .maybeSingle();
     
-    if (rows.length === 0) return null;
+    if (error) throw error;
+    if (!data) return null;
     
-    const emp = rows[0];
-    return emp.password === password 
-      ? { nik: emp.nik, name: emp.name, password: emp.password } 
+    return data.password === password 
+      ? { nik: data.nik, name: data.name, password: data.password } 
       : null;
   } catch (error) {
-    console.error("Error validating login in MySQL:", error);
-    // Fallback to memory
+    console.error("Error validating login in Supabase:", error);
     const emp = memoryEmployees.find(e => e.nik === nik);
     return emp && emp.password === password ? emp : null;
   }

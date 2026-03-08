@@ -1,55 +1,47 @@
-import mysql, { Pool, PoolConnection, RowDataPacket, ResultSetHeader } from "mysql2/promise";
+import { createClient, SupabaseClient } from "@supabase/supabase-js";
 
-// MySQL connection pool configuration
-const poolConfig = {
-  host: process.env.DB_HOST || "localhost",
-  port: parseInt(process.env.DB_PORT || "3306"),
-  user: process.env.DB_USER || "root",
-  password: process.env.DB_PASSWORD || "",
-  database: process.env.DB_NAME || "jadwal_db",
-  waitForConnections: true,
-  connectionLimit: 10,
-  queueLimit: 0,
+// Supabase configuration
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "";
+const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "";
+
+// Create Supabase client
+let supabase: SupabaseClient | null = null;
+
+export function getSupabase(): SupabaseClient {
+  if (!supabase && supabaseUrl && supabaseAnonKey) {
+    supabase = createClient(supabaseUrl, supabaseAnonKey);
+  }
+  return supabase!;
+}
+
+// Check if Supabase is configured
+export const isConfigured = !!(supabaseUrl && supabaseAnonKey);
+
+// For backwards compatibility - export db object
+export const db = {
+  supabase: getSupabase(),
 };
 
-// Create pool
-let pool: Pool | null = null;
+// Helper to run queries (for compatibility)
+export async function query<T>(sql: string, params?: (string | number)[]): Promise<T> {
+  // Not used with Supabase - using Supabase methods directly
+  throw new Error("Use Supabase methods directly");
+}
 
-function getPool(): Pool {
-  if (!pool) {
-    pool = mysql.createPool(poolConfig);
-  }
-  return pool;
+export async function execute(sql: string, params?: (string | number)[]): Promise<any> {
+  // Not used with Supabase - using Supabase methods directly
+  throw new Error("Use Supabase methods directly");
 }
 
 // Test connection
 export async function testConnection(): Promise<boolean> {
+  if (!isConfigured) return false;
+  
   try {
-    const connection = await getPool().getConnection();
-    await connection.ping();
-    connection.release();
-    return true;
+    const { data, error } = await getSupabase().from("employees").select("nik").limit(1);
+    return !error;
   } catch (error) {
-    console.error("MySQL connection error:", error);
+    console.error("Supabase connection error:", error);
     return false;
   }
-}
-
-// Check if MySQL is configured
-export const isConfigured = true;
-
-// Database instance for compatibility
-export const db = {
-  pool: getPool(),
-};
-
-// Helper to run queries
-export async function query<T extends RowDataPacket[]>(sql: string, params?: (string | number)[]): Promise<T> {
-  const [rows] = await getPool().query<T>(sql, params as (string | number)[]);
-  return rows;
-}
-
-export async function execute(sql: string, params?: (string | number)[]): Promise<ResultSetHeader> {
-  const [result] = await getPool().execute<ResultSetHeader>(sql, params as (string | number)[]);
-  return result;
 }
