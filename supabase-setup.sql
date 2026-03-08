@@ -16,10 +16,10 @@ CREATE TABLE IF NOT EXISTS schedules (
   nik VARCHAR(50) NOT NULL,
   year INTEGER NOT NULL,
   month INTEGER NOT NULL,
-  day INTEGER NOT NULL,
+  "day" INTEGER NOT NULL,
   shift VARCHAR(10) NOT NULL,
   FOREIGN KEY (nik) REFERENCES employees(nik) ON DELETE CASCADE,
-  UNIQUE(nik, year, month, day)
+  UNIQUE(nik, year, month, "day")
 );
 
 -- 3. Admin locked dates table
@@ -27,8 +27,8 @@ CREATE TABLE IF NOT EXISTS admin_locked_dates (
   id SERIAL PRIMARY KEY,
   year INTEGER NOT NULL,
   month INTEGER NOT NULL,
-  day INTEGER NOT NULL,
-  UNIQUE(year, month, day)
+  "day" INTEGER NOT NULL,
+  UNIQUE(year, month, "day")
 );
 
 -- 4. Employee notes table
