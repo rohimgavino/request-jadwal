@@ -185,14 +185,17 @@ export default function Home() {
     loadData();
   }, []);
 
-  // Real-time polling - refresh data every 5 seconds to detect changes from other users
+  // Real-time polling - refresh data every 2 seconds to detect changes from other users
+  // Skip polling when there's a pending local save to avoid overwriting local changes
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [pendingSaves, setPendingSaves] = useState(0); // Track pending saves to avoid polling conflicts
   
   useEffect(() => {
     const POLL_INTERVAL = 2000; // 2 seconds - faster polling for near real-time updates
     
     const pollData = async () => {
-      if (isRefreshing) return; // Skip if already refreshing
+      // Skip polling if already refreshing or if there are pending local saves
+      if (isRefreshing || pendingSaves > 0) return;
       setIsRefreshing(true);
       
       try {
@@ -215,7 +218,7 @@ export default function Home() {
     const intervalId = setInterval(pollData, POLL_INTERVAL);
     
     return () => clearInterval(intervalId);
-  }, [isRefreshing]);
+  }, [isRefreshing, pendingSaves]);
   
   // Add employee form
   const [newEmpName, setNewEmpName] = useState("");
@@ -424,6 +427,9 @@ const isAdminLockedDay = (day: number, month: number, year: number, adminLocked:
 
       const newShift = SHIFT_OPTIONS[nextIndex];
       
+      // Track pending save to prevent polling from overwriting local changes
+      setPendingSaves((prev) => prev + 1);
+      
       // Update local state immediately for better UX
       setAllSchedule((prev) => ({
         ...prev,
@@ -453,9 +459,12 @@ const isAdminLockedDay = (day: number, month: number, year: number, adminLocked:
             },
           },
         }));
+      } finally {
+        // Clear pending save - polling can now refresh
+        setPendingSaves((prev) => Math.max(0, prev - 1));
       }
     },
-    [schedule, getLiburCountForDay, getCLCountForDay, canEditCell, monthKey, year, month]
+    [schedule, getLiburCountForDay, getCLCountForDay, canEditCell, monthKey, year, month, pendingSaves]
   );
 
   const handleAddEmployee = async () => {
