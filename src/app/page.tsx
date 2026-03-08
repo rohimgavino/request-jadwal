@@ -189,7 +189,7 @@ export default function Home() {
   const [isRefreshing, setIsRefreshing] = useState(false);
   
   useEffect(() => {
-    const POLL_INTERVAL = 5000; // 5 seconds
+    const POLL_INTERVAL = 2000; // 2 seconds - faster polling for near real-time updates
     
     const pollData = async () => {
       if (isRefreshing) return; // Skip if already refreshing
