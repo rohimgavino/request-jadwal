@@ -212,7 +212,7 @@ export async function getAllSchedules(): Promise<Record<string, Record<string, R
     
     const allSchedules: Record<string, Record<string, Record<number, string>>> = {};
     for (const row of data) {
-      const monthKey = `${row.year}-${String(row.month).padStart(2, "0")}`;
+      const monthKey = `${row.year}-${String(row.month + 1).padStart(2, "0")}`;
       if (!allSchedules[monthKey]) {
         allSchedules[monthKey] = {};
       }
