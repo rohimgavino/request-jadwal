@@ -15,6 +15,7 @@ import {
   saveAdminLockedDates,
   getEmployeeNotes,
   saveEmployeeNotes,
+  checkDbConnection,
   type Employee 
 } from "@/actions/db";
 
@@ -109,6 +110,9 @@ export default function Home() {
     note: string;
   }>({ open: false, nik: "", name: "", note: "" });
   
+  // Database connection status
+  const [dbStatus, setDbStatus] = useState<{ connected: boolean; error?: string }>({ connected: true });
+  
   // Toggle admin locked date for current month
   const toggleAdminLockedDate = useCallback((day: number) => {
     const key = getMonthKey(year, month);
@@ -154,6 +158,10 @@ export default function Home() {
   useEffect(() => {
     async function loadData() {
       try {
+        // Check database connection first
+        const connStatus = await checkDbConnection();
+        setDbStatus(connStatus);
+        
         const [emps, scheds, lockedDates, notes] = await Promise.all([
           getEmployees(),
           getAllSchedules(),
@@ -784,6 +792,17 @@ const isAdminLockedDay = (day: number, month: number, year: number, adminLocked:
               <p className="text-yellow-300 text-sm mt-1 font-semibold">
                 ⚠️ Batas input request jadwal: tanggal 23 setiap bulan
               </p>
+              {/* Database connection status }
+              {!dbStatus.connected && (
+                <p className="text-red-300 text-sm mt-1 font-semibold">
+                  🔴 Database: {dbStatus.error || "Tidak terhubung"}
+                </p>
+              )}
+              {dbStatus.connected && (
+                <p className="text-green-300 text-sm mt-1 font-semibold">
+                  🟢 Database: Terhubung
+                </p>
+              )}
             </div>
             <div className="flex items-center gap-3 flex-wrap">
               {/* Export Excel - always visible in header */}

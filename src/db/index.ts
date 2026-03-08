@@ -34,14 +34,19 @@ export async function execute(sql: string, params?: (string | number)[]): Promis
 }
 
 // Test connection
-export async function testConnection(): Promise<boolean> {
-  if (!isConfigured) return false;
+export async function testConnection(): Promise<{ connected: boolean; error?: string }> {
+  if (!isConfigured) {
+    return { connected: false, error: "Supabase not configured - missing URL or ANON KEY" };
+  }
   
   try {
     const { data, error } = await getSupabase().from("employees").select("nik").limit(1);
-    return !error;
-  } catch (error) {
+    if (error) {
+      return { connected: false, error: error.message };
+    }
+    return { connected: true };
+  } catch (error: any) {
     console.error("Supabase connection error:", error);
-    return false;
+    return { connected: false, error: error?.message || "Unknown error" };
   }
 }

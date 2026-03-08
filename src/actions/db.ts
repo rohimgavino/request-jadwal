@@ -1,6 +1,9 @@
 "use server";
 
-import { getSupabase, isConfigured } from "@/db";
+import { getSupabase, isConfigured, testConnection } from "@/db";
+
+// Re-export testConnection for page use
+export { testConnection };
 
 // Employee types
 export type Employee = {
@@ -531,4 +534,9 @@ export async function validateLogin(nik: string, password: string): Promise<Empl
     const emp = memoryEmployees.find(e => e.nik === nik);
     return emp && emp.password === password ? emp : null;
   }
+}
+
+// Check database connection status
+export async function checkDbConnection(): Promise<{ connected: boolean; error?: string }> {
+  return await testConnection();
 }
