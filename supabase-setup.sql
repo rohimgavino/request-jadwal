@@ -53,14 +53,20 @@ ON CONFLICT (nik) DO NOTHING;
 -- ENABLE ROW LEVEL SECURITY (Optional)
 -- =============================================
 
--- Allow public read/write for this app (since we handle auth in-app)
+-- Drop existing policies if any (to avoid conflicts)
+DROP POLICY IF EXISTS "Allow all access to employees" ON employees;
+DROP POLICY IF EXISTS "Allow all access to schedules" ON schedules;
+DROP POLICY IF EXISTS "Allow all access to admin_locked_dates" ON admin_locked_dates;
+DROP POLICY IF EXISTS "Allow all access to employee_notes" ON employee_notes;
+
+-- Enable RLS
 ALTER TABLE employees ENABLE ROW LEVEL SECURITY;
 ALTER TABLE schedules ENABLE ROW LEVEL SECURITY;
 ALTER TABLE admin_locked_dates ENABLE ROW LEVEL SECURITY;
 ALTER TABLE employee_notes ENABLE ROW LEVEL SECURITY;
 
--- Create policies to allow all operations
-CREATE POLICY "Allow all access to employees" ON employees FOR ALL USING (true) WITH CHECK (true);
-CREATE POLICY "Allow all access to schedules" ON schedules FOR ALL USING (true) WITH CHECK (true);
-CREATE POLICY "Allow all access to admin_locked_dates" ON admin_locked_dates FOR ALL USING (true) WITH CHECK (true);
-CREATE POLICY "Allow all access to employee_notes" ON employee_notes FOR ALL USING (true) WITH CHECK (true);
+-- Create simple permissive policies for anon/public access
+CREATE POLICY "employees_all" ON employees FOR ALL TO anon, authenticated USING (true) WITH CHECK (true);
+CREATE POLICY "schedules_all" ON schedules FOR ALL TO anon, authenticated USING (true) WITH CHECK (true);
+CREATE POLICY "admin_locked_dates_all" ON admin_locked_dates FOR ALL TO anon, authenticated USING (true) WITH CHECK (true);
+CREATE POLICY "employee_notes_all" ON employee_notes FOR ALL TO anon, authenticated USING (true) WITH CHECK (true);
