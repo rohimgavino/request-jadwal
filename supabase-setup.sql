@@ -50,23 +50,9 @@ VALUES ('ADMIN', 'Administrator', 'admin123')
 ON CONFLICT (nik) DO NOTHING;
 
 -- =============================================
--- ENABLE ROW LEVEL SECURITY (Optional)
+-- DISABLE ROW LEVEL SECURITY (for simple public access)
 -- =============================================
-
--- Drop existing policies if any (to avoid conflicts)
-DROP POLICY IF EXISTS "Allow all access to employees" ON employees;
-DROP POLICY IF EXISTS "Allow all access to schedules" ON schedules;
-DROP POLICY IF EXISTS "Allow all access to admin_locked_dates" ON admin_locked_dates;
-DROP POLICY IF EXISTS "Allow all access to employee_notes" ON employee_notes;
-
--- Enable RLS
-ALTER TABLE employees ENABLE ROW LEVEL SECURITY;
-ALTER TABLE schedules ENABLE ROW LEVEL SECURITY;
-ALTER TABLE admin_locked_dates ENABLE ROW LEVEL SECURITY;
-ALTER TABLE employee_notes ENABLE ROW LEVEL SECURITY;
-
--- Create simple permissive policies for anon/public access
-CREATE POLICY "employees_all" ON employees FOR ALL TO anon, authenticated USING (true) WITH CHECK (true);
-CREATE POLICY "schedules_all" ON schedules FOR ALL TO anon, authenticated USING (true) WITH CHECK (true);
-CREATE POLICY "admin_locked_dates_all" ON admin_locked_dates FOR ALL TO anon, authenticated USING (true) WITH CHECK (true);
-CREATE POLICY "employee_notes_all" ON employee_notes FOR ALL TO anon, authenticated USING (true) WITH CHECK (true);
+ALTER TABLE employees DISABLE ROW LEVEL SECURITY;
+ALTER TABLE schedules DISABLE ROW LEVEL SECURITY;
+ALTER TABLE admin_locked_dates DISABLE ROW LEVEL SECURITY;
+ALTER TABLE employee_notes DISABLE ROW LEVEL SECURITY;
