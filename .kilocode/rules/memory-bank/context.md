@@ -46,6 +46,7 @@ The template is a clean Next.js 16 starter with TypeScript and Tailwind CSS 4. I
 - [x] Added deadline warning display - batas input jadwal tanggal 23 setiap bulan
 - [x] Added better error messages for Supabase schedule save failures (shows alert with error details)
 - [x] Added real-time polling - schedule data now refreshes every 5 seconds to show changes from other users without manual refresh
+- [x] Fixed local input delay - polling now skips during pending saves so local changes appear instantly
 
 ## Current Structure
 
