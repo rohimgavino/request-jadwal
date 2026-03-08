@@ -44,6 +44,7 @@ The template is a clean Next.js 16 starter with TypeScript and Tailwind CSS 4. I
 - [x] Fixed edit restriction to use real-time date (block all editing after day 23 realtime)
 - [x] Added auto-delete for last month's schedule data on app startup (save storage)
 - [x] Added deadline warning display - batas input jadwal tanggal 23 setiap bulan
+- [x] Added better error messages for Supabase schedule save failures (shows alert with error details)
 
 ## Current Structure
 
