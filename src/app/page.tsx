@@ -276,6 +276,12 @@ export default function Home() {
   const daysInMonth = getDaysInMonth(year, month);
   const days = Array.from({ length: daysInMonth }, (_, i) => i + 1);
 
+  const sortedEmployees = useMemo(() => {
+    return [...employees]
+      .filter(emp => emp.name.toLowerCase() !== "administrator")
+      .sort((a, b) => a.name.localeCompare(b.name, 'id'));
+  }, [employees]);
+
   // Count how many employees have "L" on a given day
   const getLiburCountForDay = useCallback(
     (day: number) => employees.filter((emp) => schedule[emp.nik]?.[day] === "L").length,
@@ -741,7 +747,7 @@ const isAdminLockedDay = (day: number, month: number, year: number, adminLocked:
       "Total C",
     ];
 
-    const rows = employees.map((emp) => {
+    const rows = sortedEmployees.map((emp) => {
       const summary = getEmployeeSummary(emp.nik);
       return [
         emp.nik,
@@ -1027,7 +1033,7 @@ const isAdminLockedDay = (day: number, month: number, year: number, adminLocked:
               </tr>
             </thead>
             <tbody>
-              {employees.map((emp, empIdx) => {
+              {sortedEmployees.map((emp, empIdx) => {
                 const empSummary = getEmployeeSummary(emp.nik);
                 const isMyRow = loggedInAs === emp.nik;
                 const canEdit = canEditCell(emp.nik, 1);
@@ -1047,9 +1053,6 @@ const isAdminLockedDay = (day: number, month: number, year: number, adminLocked:
                         <div className="flex flex-col min-w-0">
                           <span className="truncate max-w-[120px] text-sm font-semibold" title={emp.name}>
                             {emp.name}
-                          </span>
-                          <span className="text-[10px] text-gray-400 font-mono">
-                            NIK: {emp.nik}
                           </span>
                         </div>
                         {/* Login/logout button per row */}
