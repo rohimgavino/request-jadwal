@@ -1474,7 +1474,6 @@ const isAdminLockedDay = (day: number, month: number, year: number, adminLocked:
                 </div>
                 <div>
                   <p className="font-semibold text-gray-800 text-sm">{loginModal.name}</p>
-                  <p className="text-xs text-gray-500 font-mono">NIK: {loginModal.nik}</p>
                 </div>
               </div>
             </div>
