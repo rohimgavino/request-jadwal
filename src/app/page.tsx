@@ -108,7 +108,8 @@ export default function Home() {
     nik: string;
     name: string;
     note: string;
-  }>({ open: false, nik: "", name: "", note: "" });
+    success: string;
+  }>({ open: false, nik: "", name: "", note: "", success: "" });
   
   // Database connection status
   const [dbStatus, setDbStatus] = useState<{ connected: boolean; error?: string }>({ connected: true });
@@ -136,7 +137,7 @@ export default function Home() {
   const openNotesModal = useCallback((nik: string, name: string) => {
     const key = getMonthKey(year, month);
     const currentNote = employeeNotes[key]?.[nik] || "";
-    setNotesModal({ open: true, nik, name, note: currentNote });
+    setNotesModal({ open: true, nik, name, note: currentNote, success: "" });
   }, [year, month, employeeNotes]);
   
   // Save employee note
@@ -151,7 +152,10 @@ export default function Home() {
     };
     setEmployeeNotes(newNotes);
     await saveEmployeeNotes(newNotes);
-    setNotesModal({ open: false, nik: "", name: "", note: "" });
+    setNotesModal((prev) => ({ ...prev, success: "✅ Catatan berhasil disimpan!" }));
+    setTimeout(() => {
+      setNotesModal({ open: false, nik: "", name: "", note: "", success: "" });
+    }, 1500);
   }, [year, month, employeeNotes, notesModal]);
   
   // Load initial data from database
@@ -1583,7 +1587,7 @@ const isAdminLockedDay = (day: number, month: number, year: number, adminLocked:
             <div className="flex items-center justify-between mb-4">
               <h2 className="text-lg font-bold text-gray-800">📝 Catatan untuk {notesModal.name}</h2>
               <button
-                onClick={() => setNotesModal({ open: false, nik: "", name: "", note: "" })}
+                onClick={() => setNotesModal({ open: false, nik: "", name: "", note: "", success: "" })}
                 className="text-gray-400 hover:text-gray-600 text-2xl leading-none"
               >
                 ×
@@ -1607,6 +1611,12 @@ const isAdminLockedDay = (day: number, month: number, year: number, adminLocked:
               />
             </div>
 
+            {notesModal.success && (
+              <div className="mb-4 bg-green-100 border border-green-400 text-green-700 px-4 py-3 rounded-lg text-sm font-semibold">
+                {notesModal.success}
+              </div>
+            )}
+
             <div className="flex gap-2">
               <button
                 onClick={handleSaveNote}
@@ -1615,7 +1625,7 @@ const isAdminLockedDay = (day: number, month: number, year: number, adminLocked:
                 💾 Simpan Catatan
               </button>
               <button
-                onClick={() => setNotesModal({ open: false, nik: "", name: "", note: "" })}
+                onClick={() => setNotesModal({ open: false, nik: "", name: "", note: "", success: "" })}
                 className="bg-gray-200 hover:bg-gray-300 text-gray-700 px-4 py-2 rounded-lg text-sm font-semibold transition"
               >
                 Batal
