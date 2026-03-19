@@ -735,7 +735,7 @@ const isAdminLockedDay = (day: number, month: number, year: number, adminLocked:
   const handleExportExcel = () => {
     const wb = XLSX.utils.book_new();
 
-    // Build header row: NIK | Nama | day1 | day2 | ... | P | P0 | S | M | L | C
+    // Build header row: NIK | Nama | day1 | day2 | ... | P | P0 | S | M | L | C | Catatan
     const header = [
       "NIK",
       "Nama Karyawan",
@@ -749,10 +749,12 @@ const isAdminLockedDay = (day: number, month: number, year: number, adminLocked:
       "Total M",
       "Total L",
       "Total C",
+      "Catatan",
     ];
 
     const rows = sortedEmployees.map((emp) => {
       const summary = getEmployeeSummary(emp.nik);
+      const note = employeeNotes[monthKey]?.[emp.nik] || "";
       return [
         emp.nik,
         emp.name,
@@ -763,6 +765,7 @@ const isAdminLockedDay = (day: number, month: number, year: number, adminLocked:
         summary.M,
         summary.L,
         summary.C,
+        note,
       ];
     });
 
@@ -783,6 +786,7 @@ const isAdminLockedDay = (day: number, month: number, year: number, adminLocked:
       "",
       "",
       "",
+      "",
     ];
 
     const wsData = [header, ...rows, summaryRow];
@@ -794,6 +798,7 @@ const isAdminLockedDay = (day: number, month: number, year: number, adminLocked:
       { wch: 22 }, // Nama
       ...days.map(() => ({ wch: 7 })),
       { wch: 8 }, { wch: 8 }, { wch: 8 }, { wch: 8 }, { wch: 8 }, { wch: 8 },
+      { wch: 30 }, // Catatan
     ];
 
     const sheetName = new Date(year, month, 1).toLocaleDateString("id-ID", {
