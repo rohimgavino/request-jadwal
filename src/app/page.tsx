@@ -265,6 +265,7 @@ export default function Home() {
   // Schedule upload modal
   const [showScheduleUploadModal, setShowScheduleUploadModal] = useState(false);
   const [scheduleUploadError, setScheduleUploadError] = useState("");
+  const [scheduleUploadSuccess, setScheduleUploadSuccess] = useState("");
   const scheduleFileInputRef = useRef<HTMLInputElement>(null);
   const [uploadYear, setUploadYear] = useState(initialYear);
   const [uploadMonth, setUploadMonth] = useState(initialMonth);
@@ -746,16 +747,16 @@ const isAdminLockedDay = (day: number, month: number, year: number, adminLocked:
         }
 
         const uploadMonthName = new Date(uploadYear, uploadMonth, 1).toLocaleDateString("id-ID", { month: "long", year: "numeric" });
-        setShowScheduleUploadModal(false);
+        setScheduleUploadSuccess(`Berhasil mengimport ${importedCount} data jadwal untuk bulan ${uploadMonthName}!`);
         setScheduleUploadError("");
         if (scheduleFileInputRef.current) scheduleFileInputRef.current.value = "";
-        alert(`Berhasil mengimport ${importedCount} data jadwal untuk bulan ${uploadMonthName}!`);
       } catch (error) {
         console.error("Failed to upload schedule:", error);
         setScheduleUploadError("Gagal mengupload data jadwal.");
+        setScheduleUploadSuccess("");
       }
     };
-    reader.onerror = () => setScheduleUploadError("Gagal membaca file. Coba lagi.");
+    reader.onerror = () => { setScheduleUploadError("Gagal membaca file. Coba lagi."); setScheduleUploadSuccess(""); };
     reader.readAsText(file);
   };
 
@@ -1039,7 +1040,7 @@ const isAdminLockedDay = (day: number, month: number, year: number, adminLocked:
               {/* Schedule upload button - admin only */}
               {isAdmin && (
                 <button
-                  onClick={() => { setUploadYear(year); setUploadMonth(month); setShowScheduleUploadModal(true); setScheduleUploadError(""); }}
+                  onClick={() => { setUploadYear(year); setUploadMonth(month); setShowScheduleUploadModal(true); setScheduleUploadError(""); setScheduleUploadSuccess(""); }}
                   className="bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-1.5 rounded-lg text-xs font-semibold transition flex items-center gap-1"
                 >
                   📅 Upload Jadwal
@@ -1660,7 +1661,7 @@ const isAdminLockedDay = (day: number, month: number, year: number, adminLocked:
             <div className="flex items-center justify-between mb-4">
               <h2 className="text-lg font-bold text-gray-800">📅 Upload Jadwal Kerja</h2>
               <button
-                onClick={() => { setShowScheduleUploadModal(false); setScheduleUploadError(""); }}
+                onClick={() => { setShowScheduleUploadModal(false); setScheduleUploadError(""); setScheduleUploadSuccess(""); }}
                 className="text-gray-400 hover:text-gray-600 text-2xl leading-none"
               >
                 ×
@@ -1734,16 +1735,35 @@ const isAdminLockedDay = (day: number, month: number, year: number, adminLocked:
               </div>
             )}
 
+            {scheduleUploadSuccess && (
+              <div className="bg-green-50 border border-green-200 rounded-lg p-3 mb-4 text-sm text-green-700">
+                ✅ {scheduleUploadSuccess}
+              </div>
+            )}
+
             <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 text-xs text-amber-700">
               ⚠️ Upload akan <strong>menambahkan/mengupdate</strong> jadwal untuk bulan <strong>{new Date(uploadYear, uploadMonth, 1).toLocaleDateString("id-ID", { month: "long", year: "numeric" })}</strong>.
             </div>
 
-            <button
-              onClick={() => { setShowScheduleUploadModal(false); setScheduleUploadError(""); }}
-              className="mt-4 w-full bg-gray-200 hover:bg-gray-300 text-gray-700 px-4 py-2 rounded-lg text-sm font-semibold transition"
-            >
-              Tutup
-            </button>
+            <div className="flex gap-2 mt-4">
+              {scheduleUploadSuccess ? (
+                <button
+                  onClick={() => { setShowScheduleUploadModal(false); setScheduleUploadError(""); setScheduleUploadSuccess(""); }}
+                  className="flex-1 bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg text-sm font-semibold transition"
+                >
+                  Tutup
+                </button>
+              ) : (
+                <>
+                  <button
+                    onClick={() => { setShowScheduleUploadModal(false); setScheduleUploadError(""); setScheduleUploadSuccess(""); }}
+                    className="flex-1 bg-gray-200 hover:bg-gray-300 text-gray-700 px-4 py-2 rounded-lg text-sm font-semibold transition"
+                  >
+                    Batal
+                  </button>
+                </>
+              )}
+            </div>
           </div>
         </div>
       )}
