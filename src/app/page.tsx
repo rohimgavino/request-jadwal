@@ -266,6 +266,8 @@ export default function Home() {
   const [showScheduleUploadModal, setShowScheduleUploadModal] = useState(false);
   const [scheduleUploadError, setScheduleUploadError] = useState("");
   const scheduleFileInputRef = useRef<HTMLInputElement>(null);
+  const [uploadYear, setUploadYear] = useState(initialYear);
+  const [uploadMonth, setUploadMonth] = useState(initialMonth);
 
   // Login modal state
   const [loginModal, setLoginModal] = useState<{
@@ -655,9 +657,10 @@ const isAdminLockedDay = (day: number, month: number, year: number, adminLocked:
 
   // Download schedule CSV template
   const handleDownloadScheduleTemplate = () => {
-    const header = ["NIK", ...days.map((d) => `${d}`)].join(",");
+    const uploadDaysInMonth = getDaysInMonth(uploadYear, uploadMonth);
+    const header = ["NIK", ...Array.from({ length: uploadDaysInMonth }, (_, i) => `${i + 1}`)].join(",");
     const sampleRows = sortedEmployees.slice(0, 3).map((emp) => {
-      const shifts = days.map(() => "").join(",");
+      const shifts = Array.from({ length: uploadDaysInMonth }, () => "").join(",");
       return `${emp.nik},${shifts}`;
     });
     const csvContent = header + "\n" + sampleRows.join("\n");
@@ -665,7 +668,7 @@ const isAdminLockedDay = (day: number, month: number, year: number, adminLocked:
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.href = url;
-    link.download = `template_jadwal_${year}_${String(month + 1).padStart(2, "0")}.csv`;
+    link.download = `template_jadwal_${uploadYear}_${String(uploadMonth + 1).padStart(2, "0")}.csv`;
     link.click();
     URL.revokeObjectURL(url);
   };
@@ -710,7 +713,8 @@ const isAdminLockedDay = (day: number, month: number, year: number, adminLocked:
 
         newSchedule[nik] = {};
 
-        for (let d = 1; d < parts.length && d <= daysInMonth; d++) {
+        const uploadDaysInMonth = getDaysInMonth(uploadYear, uploadMonth);
+        for (let d = 1; d <= uploadDaysInMonth && d < parts.length; d++) {
           const shift = parts[d]?.trim().toUpperCase();
           if (shift && ["P", "P0", "S", "M", "L", "C"].includes(shift)) {
             newSchedule[nik][d] = shift;
@@ -725,7 +729,7 @@ const isAdminLockedDay = (day: number, month: number, year: number, adminLocked:
       }
 
       try {
-        const monthKey = getMonthKey(year, month);
+        const monthKey = getMonthKey(uploadYear, uploadMonth);
         const updatedSchedule = {
           ...allSchedule,
           [monthKey]: {
@@ -737,14 +741,15 @@ const isAdminLockedDay = (day: number, month: number, year: number, adminLocked:
 
         for (const [nik, shifts] of Object.entries(newSchedule)) {
           for (const [day, shift] of Object.entries(shifts)) {
-            await updateSchedule(nik, year, month, parseInt(day), shift);
+            await updateSchedule(nik, uploadYear, uploadMonth, parseInt(day), shift);
           }
         }
 
+        const uploadMonthName = new Date(uploadYear, uploadMonth, 1).toLocaleDateString("id-ID", { month: "long", year: "numeric" });
         setShowScheduleUploadModal(false);
         setScheduleUploadError("");
         if (scheduleFileInputRef.current) scheduleFileInputRef.current.value = "";
-        alert(`Berhasil mengimport ${importedCount} data jadwal!`);
+        alert(`Berhasil mengimport ${importedCount} data jadwal untuk bulan ${uploadMonthName}!`);
       } catch (error) {
         console.error("Failed to upload schedule:", error);
         setScheduleUploadError("Gagal mengupload data jadwal.");
@@ -1034,7 +1039,7 @@ const isAdminLockedDay = (day: number, month: number, year: number, adminLocked:
               {/* Schedule upload button - admin only */}
               {isAdmin && (
                 <button
-                  onClick={() => { setShowScheduleUploadModal(true); setScheduleUploadError(""); }}
+                  onClick={() => { setUploadYear(year); setUploadMonth(month); setShowScheduleUploadModal(true); setScheduleUploadError(""); }}
                   className="bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-1.5 rounded-lg text-xs font-semibold transition flex items-center gap-1"
                 >
                   📅 Upload Jadwal
@@ -1664,8 +1669,35 @@ const isAdminLockedDay = (day: number, month: number, year: number, adminLocked:
 
             <div className="bg-purple-50 border border-purple-200 rounded-xl p-4 mb-4">
               <p className="text-sm text-purple-800 font-semibold mb-1">📋 Format Template CSV</p>
+              
+              <div className="mb-3">
+                <label className="block text-xs text-purple-700 mb-1">Pilih Bulan dan Tahun:</label>
+                <div className="flex gap-2">
+                  <select
+                    value={uploadMonth}
+                    onChange={(e) => setUploadMonth(parseInt(e.target.value))}
+                    className="flex-1 border border-purple-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-purple-400"
+                  >
+                    {Array.from({ length: 12 }, (_, i) => (
+                      <option key={i} value={i}>
+                        {new Date(2024, i, 1).toLocaleDateString("id-ID", { month: "long" })}
+                      </option>
+                    ))}
+                  </select>
+                  <select
+                    value={uploadYear}
+                    onChange={(e) => setUploadYear(parseInt(e.target.value))}
+                    className="w-24 border border-purple-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-purple-400"
+                  >
+                    {[2024, 2025, 2026, 2027, 2028].map((y) => (
+                      <option key={y} value={y}>{y}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
               <p className="text-xs text-purple-700 mb-3">
-                Kolom pertama <strong>NIK</strong>, kolom berikutnya tanggal 1-{daysInMonth}.
+                Kolom pertama <strong>NIK</strong>, kolom berikutnya tanggal 1-{getDaysInMonth(uploadYear, uploadMonth)}.
               </p>
               <div className="bg-white border border-purple-200 rounded-lg p-3 font-mono text-xs text-gray-700 mb-3 overflow-x-auto">
                 <div className="text-purple-600 font-bold whitespace-nowrap">NIK,1,2,3,4,5,...</div>
@@ -1703,7 +1735,7 @@ const isAdminLockedDay = (day: number, month: number, year: number, adminLocked:
             )}
 
             <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 text-xs text-amber-700">
-              ⚠️ Upload akan <strong>menambahkan/mengupdate</strong> jadwal untuk bulan <strong>{monthName}</strong>.
+              ⚠️ Upload akan <strong>menambahkan/mengupdate</strong> jadwal untuk bulan <strong>{new Date(uploadYear, uploadMonth, 1).toLocaleDateString("id-ID", { month: "long", year: "numeric" })}</strong>.
             </div>
 
             <button
