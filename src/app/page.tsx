@@ -284,6 +284,16 @@ export default function Home() {
     error: string;
   }>({ open: false, inputPassword: "", error: "" });
 
+  // Admin reset password modal
+  const [resetPasswordModal, setResetPasswordModal] = useState<{
+    open: boolean;
+    nik: string;
+    newPassword: string;
+    confirmPassword: string;
+    error: string;
+    success: string;
+  }>({ open: false, nik: "", newPassword: "", confirmPassword: "", error: "", success: "" });
+
   // Password change modal state
   const [passwordChangeModal, setPasswordChangeModal] = useState<{
     open: boolean;
@@ -723,6 +733,51 @@ const isAdminLockedDay = (day: number, month: number, year: number, adminLocked:
     }
   };
 
+  // Handle admin reset password
+  const handleResetPassword = async () => {
+    setResetPasswordModal((prev) => ({ ...prev, error: "", success: "" }));
+    
+    const { nik, newPassword, confirmPassword } = resetPasswordModal;
+    
+    if (!nik.trim()) {
+      setResetPasswordModal((prev) => ({ ...prev, error: "NIK tidak boleh kosong." }));
+      return;
+    }
+    
+    const emp = employees.find((e) => e.nik === nik.trim());
+    if (!emp) {
+      setResetPasswordModal((prev) => ({ ...prev, error: "Karyawan dengan NIK tersebut tidak ditemukan." }));
+      return;
+    }
+    
+    if (!newPassword || newPassword.length < 1) {
+      setResetPasswordModal((prev) => ({ ...prev, error: "Password baru tidak boleh kosong." }));
+      return;
+    }
+    
+    if (newPassword !== confirmPassword) {
+      setResetPasswordModal((prev) => ({ ...prev, error: "Konfirmasi password tidak cocok." }));
+      return;
+    }
+    
+    try {
+      await updateEmployeePassword(nik.trim(), newPassword);
+      
+      setEmployees((prev) =>
+        prev.map((e) => (e.nik === nik.trim() ? { ...e, password: newPassword } : e))
+      );
+      
+      setResetPasswordModal((prev) => ({ ...prev, success: `Password untuk ${emp.name} berhasil direset!`, newPassword: "", confirmPassword: "" }));
+      
+      setTimeout(() => {
+        setResetPasswordModal((prev) => ({ ...prev, open: false, success: "", nik: "" }));
+      }, 2000);
+    } catch (error) {
+      console.error("Failed to reset password:", error);
+      setResetPasswordModal((prev) => ({ ...prev, error: "Gagal mereset password." }));
+    }
+  };
+
   // Export to Excel
   const handleExportExcel = () => {
     const wb = XLSX.utils.book_new();
@@ -868,6 +923,15 @@ const isAdminLockedDay = (day: number, month: number, year: number, adminLocked:
                   className="bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-1.5 rounded-lg text-xs font-semibold transition flex items-center gap-1"
                 >
                   📂 Upload
+                </button>
+              )}
+              {/* Reset password button - admin only */}
+              {isAdmin && (
+                <button
+                  onClick={() => setResetPasswordModal({ open: true, nik: "", newPassword: "", confirmPassword: "", error: "", success: "" })}
+                  className="bg-purple-600 hover:bg-purple-700 text-white px-3 py-1.5 rounded-lg text-xs font-semibold transition flex items-center gap-1"
+                >
+                  🔑 Reset Password
                 </button>
               )}
               {/* Admin lock dates control - admin only */}
@@ -1583,6 +1647,91 @@ const isAdminLockedDay = (day: number, month: number, year: number, adminLocked:
               </button>
               <button
                 onClick={() => setAdminLoginModal({ open: false, inputPassword: "", error: "" })}
+                className="bg-gray-200 hover:bg-gray-300 text-gray-700 px-4 py-2 rounded-lg text-sm font-semibold transition"
+              >
+                Batal
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Admin Reset Password Modal */}
+      {resetPasswordModal.open && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm p-6">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-lg font-bold text-gray-800">🔐 Reset Password Karyawan</h2>
+              <button
+                onClick={() => setResetPasswordModal({ open: false, nik: "", newPassword: "", confirmPassword: "", error: "", success: "" })}
+                className="text-gray-400 hover:text-gray-600 text-2xl leading-none"
+              >
+                ×
+              </button>
+            </div>
+
+            <div className="bg-orange-50 border border-orange-200 rounded-xl p-4 mb-4">
+              <p className="text-sm text-orange-800">
+                Reset password untuk karyawan berdasarkan NIK.
+              </p>
+            </div>
+
+            <div className="mb-4">
+              <label className="block text-sm font-semibold text-gray-700 mb-2">NIK Karyawan:</label>
+              <input
+                type="text"
+                value={resetPasswordModal.nik}
+                onChange={(e) => setResetPasswordModal((prev) => ({ ...prev, nik: e.target.value, error: "" }))}
+                placeholder="Masukkan NIK karyawan..."
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400"
+                autoFocus
+              />
+            </div>
+
+            <div className="mb-4">
+              <label className="block text-sm font-semibold text-gray-700 mb-2">Password Baru:</label>
+              <input
+                type="password"
+                value={resetPasswordModal.newPassword}
+                onChange={(e) => setResetPasswordModal((prev) => ({ ...prev, newPassword: e.target.value, error: "" }))}
+                placeholder="Masukkan password baru..."
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400"
+              />
+            </div>
+
+            <div className="mb-4">
+              <label className="block text-sm font-semibold text-gray-700 mb-2">Konfirmasi Password:</label>
+              <input
+                type="password"
+                value={resetPasswordModal.confirmPassword}
+                onChange={(e) => setResetPasswordModal((prev) => ({ ...prev, confirmPassword: e.target.value, error: "" }))}
+                onKeyDown={(e) => e.key === "Enter" && handleResetPassword()}
+                placeholder="Konfirmasi password baru..."
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400"
+              />
+            </div>
+
+            {resetPasswordModal.error && (
+              <div className="bg-red-50 border border-red-200 rounded-lg p-3 mb-4 text-sm text-red-700">
+                ⚠️ {resetPasswordModal.error}
+              </div>
+            )}
+
+            {resetPasswordModal.success && (
+              <div className="bg-green-50 border border-green-200 rounded-lg p-3 mb-4 text-sm text-green-700">
+                ✅ {resetPasswordModal.success}
+              </div>
+            )}
+
+            <div className="flex gap-2">
+              <button
+                onClick={handleResetPassword}
+                className="flex-1 bg-orange-500 hover:bg-orange-600 text-white px-4 py-2 rounded-lg text-sm font-semibold transition"
+              >
+                Reset Password
+              </button>
+              <button
+                onClick={() => setResetPasswordModal({ open: false, nik: "", newPassword: "", confirmPassword: "", error: "", success: "" })}
                 className="bg-gray-200 hover:bg-gray-300 text-gray-700 px-4 py-2 rounded-lg text-sm font-semibold transition"
               >
                 Batal
