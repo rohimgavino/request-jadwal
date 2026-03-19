@@ -68,6 +68,36 @@ function isWeekend(year: number, month: number, day: number) {
   return dow === 0 || dow === 6;
 }
 
+const INDONESIAN_HOLIDAYS_2026: Record<string, string> = {
+  "1-1": "Tahun Baru Masehi",
+  "1-27": "Tahun Baru Imlek 2577",
+  "2-17": "Isra Mi'raj Nabi Muhammad SAW",
+  "3-3": "Hari Raya Nyepi 1948",
+  "3-20": "Jumat Agung",
+  "3-24": "Paskah",
+  "4-6": "Hari Raya Idulfitri 1447 H",
+  "4-7": "Hari Raya Idulfitri 1447 H",
+  "4-9": "Hari Raya Idulfitri 1447 H",
+  "5-1": "Hari Buruh Internasional",
+  "5-6": "Kenaikan Isa Almasih",
+  "5-16": "Vaisakhi",
+  "5-17": "Vaisakhi",
+  "6-1": "Hari Lahir Pancasila",
+  "6-6": "Hari Raya Iduladha 1447 H",
+  "7-7": "Tahun Baru Islam 1448 H",
+  "8-17": "Hari Kemerdekaan RI",
+  "9-7": "Maulid Nabi Muhammad SAW",
+  "10-20": "Hari的大seluruh Bangsa - Satuabadine",
+  "11-1": "Hari Santri Nasional",
+  "12-25": "Hari Raya Natal",
+  "12-31": "Malam Tahun Baru",
+};
+
+function isNationalHoliday(year: number, month: number, day: number): string {
+  const key = `${month + 1}-${day}`;
+  return INDONESIAN_HOLIDAYS_2026[key] || "";
+}
+
 // Schedule data keyed by "YYYY-MM" then employee NIK then day
 type MonthSchedule = Record<string, Record<number, string>>;
 type AllScheduleData = Record<string, MonthSchedule>;
@@ -302,40 +332,7 @@ export default function Home() {
     [schedule, employees]
   );
 
-  // Indonesian National Holidays for 2026 (Tanggal Merah)
-const INDONESIAN_HOLIDAYS_2026: Record<string, string> = {
-  "1-1": "Tahun Baru Masehi",
-  "1-27": "Tahun Baru Imlek 2577",
-  "2-17": "Isra Mi'raj Nabi Muhammad SAW",
-  "3-3": "Hari Raya Nyepi 1948",
-  "3-20": "Jumat Agung",
-  "3-24": "Paskah",
-  "4-6": "Hari Raya Idulfitri 1447 H",
-  "4-7": "Hari Raya Idulfitri 1447 H",
-  "4-9": "Hari Raya Idulfitri 1447 H",
-  "5-1": "Hari Buruh Internasional",
-  "5-6": "Kenaikan Isa Almasih",
-  "5-16": "Vaisakhi",
-  "5-17": "Vaisakhi",
-  "6-1": "Hari Lahir Pancasila",
-  "6-6": "Hari Raya Iduladha 1447 H",
-  "7-7": "Tahun Baru Islam 1448 H",
-  "8-17": "Hari Kemerdekaan RI",
-  "9-7": "Maulid Nabi Muhammad SAW",
-  "10-20": "Hari的大seluruh Bangsa - Satuabadine",
-  "11-1": "Hari Santri Nasional",
-  "12-25": "Hari Raya Natal",
-  "12-31": "Malam Tahun Baru",
-};
-
-// Check if a date is an Indonesian holiday
-const isIndonesianHoliday = (day: number, month: number): { isHoliday: boolean; name: string } => {
-  const key = `${month + 1}-${day}`;
-  const holidayName = INDONESIAN_HOLIDAYS_2026[key];
-  return { isHoliday: !!holidayName, name: holidayName || "" };
-};
-
-// Check if a day is admin-locked for the current month
+  // Check if a day is admin-locked for the current month
 const isAdminLockedDay = (day: number, month: number, year: number, adminLocked: Record<string, number[]>): boolean => {
   const key = `${year}-${String(month + 1).padStart(2, "0")}`;
   const lockedDays = adminLocked[key] || [];
@@ -995,6 +992,8 @@ const isAdminLockedDay = (day: number, month: number, year: number, adminLocked:
                   const isDay12 = day <= 2;
                   const isAdminLocked = isAdminLockedDay(day, month, year, adminLockedDates);
                   const isLocked = isDay12 || isAdminLocked;
+                  const holidayName = isNationalHoliday(year, month, day);
+                  const isHoliday = !!holidayName;
                   return (
                     <th
                       key={day}
@@ -1002,11 +1001,13 @@ const isAdminLockedDay = (day: number, month: number, year: number, adminLocked:
                       className={`px-1 py-2 text-center font-semibold min-w-[46px] border-r border-blue-600 ${
                         isLocked 
                           ? "bg-red-600 text-white" 
-                          : isWeekend(year, month, day) 
-                            ? "bg-blue-900" 
-                            : "bg-blue-700"
+                          : isHoliday
+                            ? "bg-red-600 text-white"
+                            : isWeekend(year, month, day) 
+                              ? "bg-blue-900" 
+                              : "bg-blue-700"
                       } ${isAdmin && day > 2 ? "cursor-pointer hover:opacity-80" : ""}`}
-                      title={isAdmin && day > 2 ? (isAdminLocked ? "Klik untuk membuka kunci" : "Klik untuk mengunci") : undefined}
+                      title={isAdmin && day > 2 ? (isAdminLocked ? "Klik untuk membuka kunci" : "Klik untuk mengunci") : (isHoliday ? holidayName : undefined)}
                     >
                       <div className="text-[10px] opacity-75">
                         {getDayName(year, month, day)}
@@ -1015,6 +1016,11 @@ const isAdminLockedDay = (day: number, month: number, year: number, adminLocked:
                       {isLocked && (
                         <div className="text-[9px] bg-white text-red-600 rounded px-0.5 mt-0.5 leading-tight font-bold" title={isDay12 ? "Tidak bisa edit" : (isAdminLocked ? "Dikunci admin" : "")}>
                           {isDay12 ? "🔒1-2" : "🔒"}
+                        </div>
+                      )}
+                      {!isLocked && isHoliday && (
+                        <div className="text-[9px] bg-white text-red-600 rounded px-0.5 mt-0.5 leading-tight font-bold">
+                          🇮🇩
                         </div>
                       )}
                       {!isLocked && liburFull && (
@@ -1100,6 +1106,8 @@ const isAdminLockedDay = (day: number, month: number, year: number, adminLocked:
                       const lockedForLibur = isDayLockedForLibur(emp.nik, day);
                       const lockedForCL = isDayLockedForCL(emp.nik, day, "C");
                       const weekend = isWeekend(year, month, day);
+                      const holidayName = isNationalHoliday(year, month, day);
+                      const isHoliday = !!holidayName;
                       const today = new Date();
                       const isPastDay23 = today.getDate() > 23;
                       const editable = canEditCell(emp.nik, day);
@@ -1114,9 +1122,11 @@ const isAdminLockedDay = (day: number, month: number, year: number, adminLocked:
                           className={`px-0.5 py-1 text-center border-r border-gray-100 ${
                             isLocked 
                               ? "bg-red-100" 
-                              : weekend 
-                                ? "bg-orange-50" 
-                                : ""
+                              : isHoliday
+                                ? "bg-red-50"
+                                : weekend 
+                                  ? "bg-orange-50" 
+                                  : ""
                           } ${isPastDay23 ? "bg-gray-50" : ""}`}
                         >
                           <button
@@ -1142,6 +1152,8 @@ const isAdminLockedDay = (day: number, month: number, year: number, adminLocked:
                                 ? `${emp.name} - ${day}: L terkunci (maks ${MAX_LIBUR_PER_DAY} orang)`
                                 : lockedForCL && !val
                                 ? `${emp.name} - ${day}: C+L terkunci (maks ${MAX_CL_PER_DAY} orang)`
+                                : isHoliday
+                                ? `${emp.name} - ${day}: ${holidayName} (Hari Libur Nasional)`
                                 : `${emp.name} - ${day}: ${SHIFT_LABELS[val] || "Kosong"} (klik untuk ubah)`
                             }
                           >
