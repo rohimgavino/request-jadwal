@@ -262,6 +262,11 @@ export default function Home() {
   const [showUploadModal, setShowUploadModal] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  // Schedule upload modal
+  const [showScheduleUploadModal, setShowScheduleUploadModal] = useState(false);
+  const [scheduleUploadError, setScheduleUploadError] = useState("");
+  const scheduleFileInputRef = useRef<HTMLInputElement>(null);
+
   // Login modal state
   const [loginModal, setLoginModal] = useState<{
     open: boolean;
@@ -648,6 +653,107 @@ const isAdminLockedDay = (day: number, month: number, year: number, adminLocked:
     reader.readAsText(file);
   };
 
+  // Download schedule CSV template
+  const handleDownloadScheduleTemplate = () => {
+    const header = ["NIK", ...days.map((d) => `${d}`)].join(",");
+    const sampleRows = sortedEmployees.slice(0, 3).map((emp) => {
+      const shifts = days.map(() => "").join(",");
+      return `${emp.nik},${shifts}`;
+    });
+    const csvContent = header + "\n" + sampleRows.join("\n");
+    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `template_jadwal_${year}_${String(month + 1).padStart(2, "0")}.csv`;
+    link.click();
+    URL.revokeObjectURL(url);
+  };
+
+  // Handle schedule CSV upload
+  const handleScheduleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setScheduleUploadError("");
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (!file.name.endsWith(".csv") && !file.name.endsWith(".txt")) {
+      setScheduleUploadError("File harus berformat .csv atau .txt");
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = async (event) => {
+      const text = event.target?.result as string;
+      const lines = text.split(/\r?\n/).map((l) => l.trim()).filter((l) => l.length > 0);
+
+      if (lines.length === 0) { setScheduleUploadError("File kosong."); return; }
+
+      const firstLine = lines[0].toLowerCase();
+      const hasHeader = firstLine.includes("nik");
+      const dataLines = hasHeader ? lines.slice(1) : lines;
+
+      if (dataLines.length === 0) { setScheduleUploadError("File tidak memiliki data jadwal."); return; }
+
+      const newSchedule: MonthSchedule = {};
+      let importedCount = 0;
+
+      for (let i = 0; i < dataLines.length; i++) {
+        const line = dataLines[i];
+        if (!line.includes(",")) continue;
+
+        const parts = line.split(",");
+        const nik = parts[0]?.trim();
+        if (!nik) continue;
+
+        const emp = employees.find((e) => e.nik === nik);
+        if (!emp) continue;
+
+        newSchedule[nik] = {};
+
+        for (let d = 1; d < parts.length && d <= daysInMonth; d++) {
+          const shift = parts[d]?.trim().toUpperCase();
+          if (shift && ["P", "P0", "S", "M", "L", "C"].includes(shift)) {
+            newSchedule[nik][d] = shift;
+            importedCount++;
+          }
+        }
+      }
+
+      if (importedCount === 0) {
+        setScheduleUploadError("Tidak ada data jadwal yang valid ditemukan.");
+        return;
+      }
+
+      try {
+        const monthKey = getMonthKey(year, month);
+        const updatedSchedule = {
+          ...allSchedule,
+          [monthKey]: {
+            ...(allSchedule[monthKey] || {}),
+            ...newSchedule,
+          },
+        };
+        setAllSchedule(updatedSchedule);
+
+        for (const [nik, shifts] of Object.entries(newSchedule)) {
+          for (const [day, shift] of Object.entries(shifts)) {
+            await updateSchedule(nik, year, month, parseInt(day), shift);
+          }
+        }
+
+        setShowScheduleUploadModal(false);
+        setScheduleUploadError("");
+        if (scheduleFileInputRef.current) scheduleFileInputRef.current.value = "";
+        alert(`Berhasil mengimport ${importedCount} data jadwal!`);
+      } catch (error) {
+        console.error("Failed to upload schedule:", error);
+        setScheduleUploadError("Gagal mengupload data jadwal.");
+      }
+    };
+    reader.onerror = () => setScheduleUploadError("Gagal membaca file. Coba lagi.");
+    reader.readAsText(file);
+  };
+
   // Open login modal for an employee
   const openLoginModal = (emp: Employee) => {
     setLoginModal({ open: true, nik: emp.nik, name: emp.name, inputPassword: "", error: "" });
@@ -922,7 +1028,16 @@ const isAdminLockedDay = (day: number, month: number, year: number, adminLocked:
                   onClick={() => { setShowUploadModal(true); setUploadError(""); }}
                   className="bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-1.5 rounded-lg text-xs font-semibold transition flex items-center gap-1"
                 >
-                  📂 Upload
+                  📂 Upload Karyawan
+                </button>
+              )}
+              {/* Schedule upload button - admin only */}
+              {isAdmin && (
+                <button
+                  onClick={() => { setShowScheduleUploadModal(true); setScheduleUploadError(""); }}
+                  className="bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-1.5 rounded-lg text-xs font-semibold transition flex items-center gap-1"
+                >
+                  📅 Upload Jadwal
                 </button>
               )}
               {/* Reset password button - admin only */}
@@ -1525,6 +1640,74 @@ const isAdminLockedDay = (day: number, month: number, year: number, adminLocked:
 
             <button
               onClick={() => { setShowUploadModal(false); setUploadError(""); }}
+              className="mt-4 w-full bg-gray-200 hover:bg-gray-300 text-gray-700 px-4 py-2 rounded-lg text-sm font-semibold transition"
+            >
+              Tutup
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Schedule Upload Modal */}
+      {showScheduleUploadModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-lg font-bold text-gray-800">📅 Upload Jadwal Kerja</h2>
+              <button
+                onClick={() => { setShowScheduleUploadModal(false); setScheduleUploadError(""); }}
+                className="text-gray-400 hover:text-gray-600 text-2xl leading-none"
+              >
+                ×
+              </button>
+            </div>
+
+            <div className="bg-purple-50 border border-purple-200 rounded-xl p-4 mb-4">
+              <p className="text-sm text-purple-800 font-semibold mb-1">📋 Format Template CSV</p>
+              <p className="text-xs text-purple-700 mb-3">
+                Kolom pertama <strong>NIK</strong>, kolom berikutnya tanggal 1-{daysInMonth}.
+              </p>
+              <div className="bg-white border border-purple-200 rounded-lg p-3 font-mono text-xs text-gray-700 mb-3 overflow-x-auto">
+                <div className="text-purple-600 font-bold whitespace-nowrap">NIK,1,2,3,4,5,...</div>
+                <div className="whitespace-nowrap">001,P,P,S,L,,...</div>
+                <div className="whitespace-nowrap">002,,M,S,P,C,...</div>
+                <div className="text-gray-400">...</div>
+              </div>
+              <p className="text-xs text-amber-700 mb-3">
+                💡 Shift: <strong>P</strong>=Pagi, <strong>S</strong>=Siang, <strong>M</strong>=Malam, <strong>L</strong>=Libur, <strong>C</strong>=Cuti, <strong>Kosong</strong>=Tidak ada shift
+              </p>
+              <button
+                onClick={handleDownloadScheduleTemplate}
+                className="bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded-lg text-sm font-semibold transition w-full flex items-center justify-center gap-2"
+              >
+                ⬇️ Download Template CSV
+              </button>
+            </div>
+
+            <div className="mb-4">
+              <label className="block text-sm font-semibold text-gray-700 mb-2">Upload File CSV:</label>
+              <input
+                ref={scheduleFileInputRef}
+                type="file"
+                accept=".csv,.txt"
+                onChange={handleScheduleFileUpload}
+                className="block w-full text-sm text-gray-600 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-purple-50 file:text-purple-700 hover:file:bg-purple-100 border border-gray-300 rounded-lg p-1 cursor-pointer"
+              />
+              <p className="text-xs text-gray-500 mt-1">Format: .csv atau .txt</p>
+            </div>
+
+            {scheduleUploadError && (
+              <div className="bg-red-50 border border-red-200 rounded-lg p-3 mb-4 text-sm text-red-700">
+                ⚠️ {scheduleUploadError}
+              </div>
+            )}
+
+            <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 text-xs text-amber-700">
+              ⚠️ Upload akan <strong>menambahkan/mengupdate</strong> jadwal untuk bulan <strong>{monthName}</strong>.
+            </div>
+
+            <button
+              onClick={() => { setShowScheduleUploadModal(false); setScheduleUploadError(""); }}
               className="mt-4 w-full bg-gray-200 hover:bg-gray-300 text-gray-700 px-4 py-2 rounded-lg text-sm font-semibold transition"
             >
               Tutup
