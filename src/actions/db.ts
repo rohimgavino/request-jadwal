@@ -543,3 +543,42 @@ export async function validateLogin(nik: string, password: string): Promise<Empl
 export async function checkDbConnection(): Promise<{ connected: boolean; error?: string }> {
   return await testConnection();
 }
+
+// Delete old schedules (from previous months)
+export async function deleteOldSchedules(): Promise<void> {
+  if (!isConfigured) {
+    // For memory storage, filter out old months
+    const now = new Date();
+    const currentYear = now.getFullYear();
+    const currentMonth = now.getMonth();
+    const currentKey = `${currentYear}-${String(currentMonth + 1).padStart(2, "0")}`;
+    
+    const updatedSchedules: Record<string, Record<string, Record<number, string>>> = {};
+    for (const [monthKey, schedules] of Object.entries(memorySchedules)) {
+      // Keep current month and future months
+      if (monthKey >= currentKey) {
+        updatedSchedules[monthKey] = schedules;
+      }
+    }
+    memorySchedules = updatedSchedules;
+    saveToBrowserStorage();
+    return;
+  }
+  
+  try {
+    const supabase = getSupabase();
+    const now = new Date();
+    const currentYear = now.getFullYear();
+    const currentMonth = now.getMonth(); // 0-indexed
+    
+    // Delete schedules from months before the current month
+    const { error } = await supabase
+      .from("schedules")
+      .delete()
+      .or(`year.lt.${currentYear},and(year.eq.${currentYear},month.lt.${currentMonth})`);
+    
+    if (error) throw error;
+  } catch (error) {
+    console.error("Error deleting old schedules from Supabase:", error);
+  }
+}

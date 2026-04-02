@@ -16,6 +16,7 @@ import {
   getEmployeeNotes,
   saveEmployeeNotes,
   checkDbConnection,
+  deleteOldSchedules,
   type Employee 
 } from "@/actions/db";
 
@@ -191,6 +192,9 @@ export default function Home() {
         const connStatus = await checkDbConnection();
         setDbStatus(connStatus);
         
+        // Delete old schedules first
+        await deleteOldSchedules();
+        
         const [emps, scheds, lockedDates, notes] = await Promise.all([
           getEmployees(),
           getAllSchedules(),
@@ -202,7 +206,16 @@ export default function Home() {
           setEmployees(emps);
         }
         
-        setAllSchedule(scheds);
+        // Filter out old months from schedule
+        const now = new Date();
+        const currentKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+        const filteredScheds: typeof scheds = {};
+        for (const [monthKey, schedules] of Object.entries(scheds)) {
+          if (monthKey >= currentKey) {
+            filteredScheds[monthKey] = schedules;
+          }
+        }
+        setAllSchedule(filteredScheds);
         setAdminLockedDates(lockedDates);
         setEmployeeNotes(notes);
       } catch (error) {
