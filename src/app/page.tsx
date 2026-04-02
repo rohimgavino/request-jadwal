@@ -69,29 +69,50 @@ function isWeekend(year: number, month: number, day: number) {
   return dow === 0 || dow === 6;
 }
 
-const INDONESIAN_HOLIDAYS_2026: Record<string, string> = {
-  "1-1": "Tahun Baru Masehi",
-  "1-16": "Isra Mi'raj Nabi Muhammad SAW",
-  "2-17": "Tahun Baru Imlek 2577",
-  "3-19": "Hari Raya Nyepi",
-  "3-20": "Hari Raya Idulfitri 1447 H",
-  "3-21": "Hari Raya Idulfitri 1447 H",
-  "4-3": "Jumat Agung",
-  "4-5": "Paskah",
-  "5-1": "Hari Buruh Internasional",
-  "5-14": "Kenaikan Isa Almasih",
-  "5-27": "Hari Raya Iduladha 1447 H",
-  "5-31": "Hari Raya Waisak 2570",
-  "6-1": "Hari Lahir Pancasila",
-  "6-16": "Tahun Baru Islam 1448 H",
-  "8-17": "Hari Kemerdekaan RI",
-  "8-25": "Maulid Nabi Muhammad SAW",
-  "12-25": "Hari Raya Natal",
+const INDONESIAN_HOLIDAYS: Record<number, Record<string, string>> = {
+  2026: {
+    "1-1": "Tahun Baru Masehi",
+    "1-16": "Isra Mi'raj Nabi Muhammad SAW",
+    "2-17": "Tahun Baru Imlek 2577",
+    "3-19": "Hari Raya Nyepi",
+    "3-20": "Hari Raya Idulfitri 1447 H",
+    "3-21": "Hari Raya Idulfitri 1447 H",
+    "4-3": "Jumat Agung",
+    "4-5": "Paskah",
+    "5-1": "Hari Buruh Internasional",
+    "5-14": "Kenaikan Isa Almasih",
+    "5-27": "Hari Raya Iduladha 1447 H",
+    "5-31": "Hari Raya Waisak 2570",
+    "6-1": "Hari Lahir Pancasila",
+    "6-16": "Tahun Baru Islam 1448 H",
+    "8-17": "Hari Kemerdekaan RI",
+    "8-25": "Maulid Nabi Muhammad SAW",
+    "12-25": "Hari Raya Natal",
+  },
+  2027: {
+    "1-1": "Tahun Baru 2027 Masehi",
+    "1-5": "Isra Mi'raj Nabi Muhammad SAW",
+    "2-6": "Tahun Baru Imlek 2578",
+    "3-9": "Hari Suci Nyepi",
+    "3-10": "Hari Raya Idulfitri 1448 H",
+    "3-11": "Hari Raya Idulfitri 1448 H",
+    "3-26": "Jumat Agung",
+    "5-1": "Hari Buruh Internasional",
+    "5-6": "Kenaikan Yesus Kristus",
+    "5-17": "Hari Raya Iduladha 1448 H",
+    "5-20": "Hari Raya Waisak 2569",
+    "6-1": "Hari Lahir Pancasila",
+    "6-6": "Tahun Baru Islam 1449 H",
+    "8-15": "Maulid Nabi Muhammad SAW",
+    "8-17": "Hari Kemerdekaan RI",
+    "12-25": "Hari Raya Natal",
+    "12-26": "Isra Mi'raj Nabi Muhammad SAW",
+  },
 };
 
 function isNationalHoliday(year: number, month: number, day: number): string {
   const key = `${month + 1}-${day}`;
-  return INDONESIAN_HOLIDAYS_2026[key] || "";
+  return INDONESIAN_HOLIDAYS[year]?.[key] || "";
 }
 
 // Schedule data keyed by "YYYY-MM" then employee NIK then day
