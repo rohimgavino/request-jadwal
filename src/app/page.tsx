@@ -53,6 +53,10 @@ const ADMIN_PASSWORD = "admin123";
 const MAX_LIBUR_PER_DAY = 5;
 // Max employees that can have "C" or "L" combined on the same day
 const MAX_CL_PER_DAY = 6;
+// Max Cuti (C) per person per month
+const MAX_CUTI_PER_PERSON = 3;
+// Max Libur (L) per person per month
+const MAX_LIBUR_PER_PERSON = 4;
 
 function getDaysInMonth(year: number, month: number) {
   return new Date(year, month + 1, 0).getDate();
@@ -480,7 +484,26 @@ const isAdminLockedDay = (day: number, month: number, year: number, adminLocked:
       }
 
       const newShift = SHIFT_OPTIONS[nextIndex];
-      
+
+      // Per-person per-month limit checks
+      const personSchedule = schedule[nik] || {};
+      const currentC = Object.values(personSchedule).filter((v) => v === "C").length;
+      const currentL = Object.values(personSchedule).filter((v) => v === "L").length;
+
+      // If changing to C (from non-C) and already at max cuti
+      const wouldBeC = newShift === "C" && currentVal !== "C";
+      const wouldBeL = newShift === "L" && currentVal !== "L";
+
+      if (wouldBeC && currentC >= MAX_CUTI_PER_PERSON) {
+        alert(`Tidak bisa set Cuti: ${emp.name} sudah mencapai maks ${MAX_CUTI_PER_PERSON} hari Cuti per bulan.`);
+        return;
+      }
+
+      if (wouldBeL && currentL >= MAX_LIBUR_PER_PERSON) {
+        alert(`Tidak bisa set Libur: ${emp.name} sudah mencapai maks ${MAX_LIBUR_PER_PERSON} hari Libur per bulan.`);
+        return;
+      }
+
       // Track pending save to prevent polling from overwriting local changes
       setPendingSaves((prev) => prev + 1);
       
