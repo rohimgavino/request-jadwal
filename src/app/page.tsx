@@ -453,6 +453,12 @@ const isAdminLockedDay = (day: number, month: number, year: number, adminLocked:
 
       const dayLiburCount = getLiburCountForDay(day);
       const dayCLCount = getCLCountForDay(day);
+
+      // Per-person per-month limit checks
+      const personSchedule = schedule[nik] || {};
+      const currentC = Object.values(personSchedule).filter((v) => v === "C").length;
+      const currentL = Object.values(personSchedule).filter((v) => v === "L").length;
+
       let attempts = 0;
 
       while (attempts < SHIFT_OPTIONS.length) {
@@ -478,33 +484,22 @@ const isAdminLockedDay = (day: number, month: number, year: number, adminLocked:
           skip = true;
         }
 
+        // Skip "C" if person already reached max cuti per month (and current is not C)
+        if (candidate === "C" && currentC >= MAX_CUTI_PER_PERSON && currentVal !== "C") {
+          skip = true;
+        }
+
+        // Skip "L" if person already reached max libur per month (and current is not L)
+        if (candidate === "L" && currentL >= MAX_LIBUR_PER_PERSON && currentVal !== "L") {
+          skip = true;
+        }
+
         if (!skip) break;
         nextIndex = (nextIndex + 1) % SHIFT_OPTIONS.length;
         attempts++;
       }
 
       const newShift = SHIFT_OPTIONS[nextIndex];
-
-      // Per-person per-month limit checks
-      const personSchedule = schedule[nik] || {};
-      const currentC = Object.values(personSchedule).filter((v) => v === "C").length;
-      const currentL = Object.values(personSchedule).filter((v) => v === "L").length;
-
-      // If changing to C (from non-C) and already at max cuti
-      const wouldBeC = newShift === "C" && currentVal !== "C";
-      const wouldBeL = newShift === "L" && currentVal !== "L";
-
-      if (wouldBeC && currentC >= MAX_CUTI_PER_PERSON) {
-        alert(`Tidak bisa set Cuti: ${emp.name} sudah mencapai maks ${MAX_CUTI_PER_PERSON} hari Cuti per bulan.`);
-        return;
-      }
-
-      if (wouldBeL && currentL >= MAX_LIBUR_PER_PERSON) {
-        alert(`Tidak bisa set Libur: ${emp.name} sudah mencapai maks ${MAX_LIBUR_PER_PERSON} hari Libur per bulan.`);
-        return;
-      }
-
-      // Track pending save to prevent polling from overwriting local changes
       setPendingSaves((prev) => prev + 1);
       
       // Update local state immediately for better UX
@@ -541,7 +536,7 @@ const isAdminLockedDay = (day: number, month: number, year: number, adminLocked:
         setPendingSaves((prev) => Math.max(0, prev - 1));
       }
     },
-    [schedule, getLiburCountForDay, getCLCountForDay, canEditCell, monthKey, year, month, pendingSaves]
+    [schedule, getLiburCountForDay, getCLCountForDay, canEditCell, monthKey, year, month]
   );
 
   const handleAddEmployee = async () => {
