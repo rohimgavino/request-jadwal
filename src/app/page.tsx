@@ -46,17 +46,8 @@ const SHIFT_LABELS: Record<string, string> = {
 const INITIAL_EMPLOYEES: Employee[] = [];
 
 // Admin credentials (special user that can edit all rows)
-const ADMIN_NIK = "ADMIN";
-const ADMIN_PASSWORD = "admin123";
-
-// Max employees that can have "L" (Libur) on the same day
-const MAX_LIBUR_PER_DAY = 5;
-// Max employees that can have "C" or "L" combined on the same day
-const MAX_CL_PER_DAY = 6;
-// Max Cuti (C) per person per month
-const MAX_CUTI_PER_PERSON = 3;
-// Max Libur (L) per person per month
-const MAX_LIBUR_PER_PERSON = 4;
+ const ADMIN_NIK = "ADMIN";
+ const ADMIN_PASSWORD = "admin123";
 
 function getDaysInMonth(year: number, month: number) {
   return new Date(year, month + 1, 0).getDate();
@@ -367,177 +358,107 @@ export default function Home() {
       .sort((a, b) => a.name.localeCompare(b.name, 'id'));
   }, [employees]);
 
-  // Count how many employees have "L" on a given day
-  const getLiburCountForDay = useCallback(
-    (day: number) => employees.filter((emp) => schedule[emp.nik]?.[day] === "L").length,
-    [schedule, employees]
-  );
+// Count how many employees have "L" on a given day
+   const getLiburCountForDay = useCallback(
+     (day: number) => employees.filter((emp) => schedule[emp.nik]?.[day] === "L").length,
+     [schedule, employees]
+   );
 
-  // Count how many employees have "C" or "L" on a given day
-  const getCLCountForDay = useCallback(
-    (day: number) =>
-      employees.filter((emp) => {
-        const v = schedule[emp.nik]?.[day];
-        return v === "C" || v === "L";
-      }).length,
-    [schedule, employees]
-  );
+   // Count how many employees have "C" or "L" on a given day
+   const getCLCountForDay = useCallback(
+     (day: number) =>
+       employees.filter((emp) => {
+         const v = schedule[emp.nik]?.[day];
+         return v === "C" || v === "L";
+       }).length,
+     [schedule, employees]
+   );
 
-  // Check if a day is admin-locked for the current month
-const isAdminLockedDay = (day: number, month: number, year: number, adminLocked: Record<string, number[]>): boolean => {
-  const key = `${year}-${String(month + 1).padStart(2, "0")}`;
-  const lockedDays = adminLocked[key] || [];
-  return lockedDays.includes(day);
-};
+   // Check if a day is admin-locked for the current month
+   const isAdminLocked = (day: number, month: number, year: number, adminLocked: Record<string, number[]>): boolean => {
+     const key = `${year}-${String(month + 1).padStart(2, "0")}`;
+     const lockedDays = adminLocked[key] || [];
+     return lockedDays.includes(day);
+   };
 
-// Check if a cell is editable by the current user
-  const canEditCell = useCallback(
-    (nik: string, day: number) => {
-      if (loggedInAs === null) return false; // must be logged in
-      // Admin can edit all rows, regular users can only edit their own row
-      if (isAdmin) return true;
-      
-      // Block editing for days 1 and 2 (first 2 days of month)
-      if (day <= 2) return false;
-      
-      // Block editing for admin-defined locked dates
-      if (isAdminLockedDay(day, month, year, adminLockedDates)) return false;
-      
-      // Calculate next month from current real-time date
-      const now = new Date();
-      const currentMonth = now.getMonth();
-      const currentYear = now.getFullYear();
-      const nextMonth = currentMonth === 11 ? 0 : currentMonth + 1;
-      const nextYear = currentMonth === 11 ? currentYear + 1 : currentYear;
-      
-      // Check if displayed month is the next month
-      const isNextMonth = year === nextYear && month === nextMonth;
-      
-      // If viewing next month and real-time date is past day 23 - no editing allowed
-      if (isNextMonth && now.getDate() > 23) return false;
-      
-      return loggedInAs === nik; // can only edit own row
-    },
-    [loggedInAs, isAdmin, year, month, adminLockedDates]
-  );
+   // Check if a cell is editable by the current user
+   const canEditCell = useCallback(
+     (nik: string, day: number) => {
+       if (loggedInAs === null) return false; // must be logged in
+       // Admin can edit all rows, regular users can only edit their own row
+       if (isAdmin) return true;
+       
+       // Block editing for days 1 and 2 (first 2 days of month)
+       if (day <= 2) return false;
+       
+       // Block editing for admin-defined locked dates
+       if (isAdminLocked(day, month, year, adminLockedDates)) return false;
+       
+       // Calculate next month from current real-time date
+       const now = new Date();
+       const currentMonth = now.getMonth();
+       const currentYear = now.getFullYear();
+       const nextMonth = currentMonth === 11 ? 0 : currentMonth + 1;
+       const nextYear = currentMonth === 11 ? currentYear + 1 : currentYear;
+       
+       // Check if displayed month is the next month
+       const isNextMonth = year === nextYear && month === nextMonth;
+       
+       // If viewing next month and real-time date is past day 23 - no editing allowed
+       if (isNextMonth && now.getDate() > 23) return false;
 
-  // A cell is locked for "L" if the day already has MAX_LIBUR_PER_DAY employees with L
-  const isDayLockedForLibur = useCallback(
-    (nik: string, day: number) => {
-      const currentVal = schedule[nik]?.[day] || "";
-      if (currentVal === "L") return false;
-      return getLiburCountForDay(day) >= MAX_LIBUR_PER_DAY;
-    },
-    [schedule, getLiburCountForDay]
-  );
+       return loggedInAs === nik; // can only edit own row
+     },
+     [loggedInAs, isAdmin, year, month, adminLockedDates]
+   );
 
-  // A cell is locked for "C" if the day already has MAX_CL_PER_DAY employees with C or L
-  const isDayLockedForCL = useCallback(
-    (nik: string, day: number, nextShift: string) => {
-      if (nextShift !== "C" && nextShift !== "L") return false;
-      const currentVal = schedule[nik]?.[day] || "";
-      // If already C or L, not locked (can still change)
-      if (currentVal === "C" || currentVal === "L") return false;
-      return getCLCountForDay(day) >= MAX_CL_PER_DAY;
-    },
-    [schedule, getCLCountForDay]
-  );
+   const handleCellClick = useCallback(
+     async (nik: string, day: number) => {
+       if (!canEditCell(nik, day)) return;
 
-  const handleCellClick = useCallback(
-    async (nik: string, day: number) => {
-      if (!canEditCell(nik, day)) return;
-
-      const currentVal = schedule[nik]?.[day] || "";
-      const currentIndex = SHIFT_OPTIONS.indexOf(currentVal);
-      let nextIndex = (currentIndex + 1) % SHIFT_OPTIONS.length;
-
-      const dayLiburCount = getLiburCountForDay(day);
-      const dayCLCount = getCLCountForDay(day);
-
-      // Per-person per-month limit checks
-      const personSchedule = schedule[nik] || {};
-      const currentC = Object.values(personSchedule).filter((v) => v === "C").length;
-      const currentL = Object.values(personSchedule).filter((v) => v === "L").length;
-
-      let attempts = 0;
-
-      while (attempts < SHIFT_OPTIONS.length) {
-        const candidate = SHIFT_OPTIONS[nextIndex];
-        let skip = false;
-
-        // Skip "L" if day is already at max libur (and current is not L)
-        if (
-          candidate === "L" &&
-          dayLiburCount >= MAX_LIBUR_PER_DAY &&
-          currentVal !== "L"
-        ) {
-          skip = true;
-        }
-
-        // Skip "C" or "L" if day is already at max C+L combined (and current is not C/L)
-        if (
-          (candidate === "C" || candidate === "L") &&
-          dayCLCount >= MAX_CL_PER_DAY &&
-          currentVal !== "C" &&
-          currentVal !== "L"
-        ) {
-          skip = true;
-        }
-
-        // Skip "C" if person already reached max cuti per month (and current is not C)
-        if (candidate === "C" && currentC >= MAX_CUTI_PER_PERSON && currentVal !== "C") {
-          skip = true;
-        }
-
-        // Skip "L" if person already reached max libur per month (and current is not L)
-        if (candidate === "L" && currentL >= MAX_LIBUR_PER_PERSON && currentVal !== "L") {
-          skip = true;
-        }
-
-        if (!skip) break;
-        nextIndex = (nextIndex + 1) % SHIFT_OPTIONS.length;
-        attempts++;
-      }
-
-      const newShift = SHIFT_OPTIONS[nextIndex];
-      setPendingSaves((prev) => prev + 1);
-      
-      // Update local state immediately for better UX
-      setAllSchedule((prev) => ({
-        ...prev,
-        [monthKey]: {
-          ...(prev[monthKey] || {}),
-          [nik]: {
-            ...((prev[monthKey] || {})[nik] || {}),
-            [day]: newShift,
-          },
-        },
-      }));
-      
-      // Persist to database
-      try {
-        await updateSchedule(nik, year, month, day, newShift);
-      } catch (error: any) {
-        console.error("Failed to update schedule:", error);
-        alert(`Gagal menyimpan: ${error?.message || error}. Cek console untuk detail.`);
-        // Revert on error
-        setAllSchedule((prev) => ({
-          ...prev,
-          [monthKey]: {
-            ...(prev[monthKey] || {}),
-            [nik]: {
-              ...((prev[monthKey] || {})[nik] || {}),
-              [day]: currentVal,
-            },
-          },
-        }));
-      } finally {
-        // Clear pending save - polling can now refresh
-        setPendingSaves((prev) => Math.max(0, prev - 1));
-      }
-    },
-    [schedule, getLiburCountForDay, getCLCountForDay, canEditCell, monthKey, year, month]
-  );
+       const currentVal = schedule[nik]?.[day] || "";
+       const currentIndex = SHIFT_OPTIONS.indexOf(currentVal);
+       const newIndex = (currentIndex + 1) % SHIFT_OPTIONS.length;
+       const newShift = SHIFT_OPTIONS[newIndex];
+       
+       setPendingSaves((prev) => prev + 1);
+       
+       // Update local state immediately for better UX
+       setAllSchedule((prev) => ({
+         ...prev,
+         [monthKey]: {
+           ...(prev[monthKey] || {}),
+           [nik]: {
+             ...(prev[monthKey]?.[nik] || {}),
+             [day]: newShift,
+           },
+         },
+       }));
+       
+       // Persist to database
+       try {
+         await updateSchedule(nik, year, month, day, newShift);
+       } catch (error: any) {
+         console.error("Failed to update schedule:", error);
+         alert(`Gagal menyimpan: ${error?.message || error}. Cek console untuk detail.`);
+         // Revert on error
+         setAllSchedule((prev) => ({
+           ...prev,
+           [monthKey]: {
+             ...(prev[monthKey] || {}),
+             [nik]: {
+               ...((prev[monthKey] || {})[nik] || {}),
+               [day]: currentVal,
+             },
+           },
+         }));
+       } finally {
+         // Clear pending save - polling can now refresh
+         setPendingSaves((prev) => Math.max(0, prev - 1));
+       }
+     },
+     [schedule, canEditCell, monthKey, year, month]
+   );
 
   const handleAddEmployee = async () => {
     const name = newEmpName.trim();
@@ -1054,13 +975,12 @@ const isAdminLockedDay = (day: number, month: number, year: number, adminLocked:
               <h1 className="text-2xl font-bold tracking-tight">
                 📅 Jadwal Kerja Karyawan
               </h1>
-              <p className="text-blue-200 text-sm mt-0.5">
-                Klik sel untuk mengubah shift • L maks {MAX_LIBUR_PER_DAY}/hari • C+L maks {MAX_CL_PER_DAY}/hari
-              </p>
-              <p className="text-yellow-300 text-sm mt-1 font-semibold">
-                ⚠️ Batas input request jadwal: tanggal 23 setiap bulan
-              </p>
-              {/* Database connection status }
+<p className="text-blue-200 text-sm mt-0.5">
+                 Klik sel untuk mengubah shift • L = Libur • C = Cuti
+               </p>
+<p className="text-yellow-300 text-sm mt-1 font-semibold">
+                 ⚠️ Batas input request jadwal: tanggal 23 setiap bulan
+               </p>
               {!dbStatus.connected && (
                 <p className="text-red-300 text-sm mt-1 font-semibold">
                   🔴 Database: {dbStatus.error || "Tidak terhubung"}
@@ -1202,12 +1122,9 @@ const isAdminLockedDay = (day: number, month: number, year: number, adminLocked:
                 {key} = {label}
               </span>
             ))}
-          <span className="ml-2 px-3 py-1 rounded-full text-xs font-bold bg-gray-200 text-gray-500 border-2 border-dashed border-gray-400">
-            🔒L = maks {MAX_LIBUR_PER_DAY} • 🔒C+L = maks {MAX_CL_PER_DAY}
-          </span>
-        </div>
+</div>
 
-        {/* Table */}
+         {/* Table */}
         <div className="overflow-x-auto rounded-xl shadow-md bg-white">
           <table className="border-collapse text-sm w-full">
             <thead>
@@ -1215,59 +1132,45 @@ const isAdminLockedDay = (day: number, month: number, year: number, adminLocked:
                 <th className="sticky left-0 z-20 bg-blue-700 px-4 py-3 text-left font-semibold min-w-[200px] border-r border-blue-600">
                   Karyawan
                 </th>
-                {days.map((day) => {
-                  const liburCount = getLiburCountForDay(day);
-                  const clCount = getCLCountForDay(day);
-                  const liburFull = liburCount >= MAX_LIBUR_PER_DAY;
-                  const clFull = clCount >= MAX_CL_PER_DAY;
-                  // Check if day 1-2 or admin-locked (for visual indicator)
-                  const isDay12 = day <= 2;
-                  const isAdminLocked = isAdminLockedDay(day, month, year, adminLockedDates);
-                  const isLocked = isDay12 || isAdminLocked;
-                  const holidayName = isNationalHoliday(year, month, day);
-                  const isHoliday = !!holidayName;
-                  return (
-                    <th
-                      key={day}
-                      onClick={isAdmin && day > 2 ? () => toggleAdminLockedDate(day) : undefined}
-                      className={`px-1 py-2 text-center font-semibold min-w-[46px] border-r border-blue-600 ${
-                        isLocked 
-                          ? "bg-red-600 text-white" 
-                          : isHoliday
-                            ? "bg-red-600 text-white"
-                            : isWeekend(year, month, day) 
-                              ? "bg-blue-900" 
-                              : "bg-blue-700"
-                      } ${isAdmin && day > 2 ? "cursor-pointer hover:opacity-80" : ""}`}
-                      title={isAdmin && day > 2 ? (isAdminLocked ? "Klik untuk membuka kunci" : "Klik untuk mengunci") : (isHoliday ? holidayName : undefined)}
-                    >
-                      <div className="text-[10px] opacity-75">
-                        {getDayName(year, month, day)}
-                      </div>
-                      <div className="text-sm">{day}</div>
-                      {isLocked && (
-                        <div className="text-[9px] bg-white text-red-600 rounded px-0.5 mt-0.5 leading-tight font-bold" title={isDay12 ? "Tidak bisa edit" : (isAdminLocked ? "Dikunci admin" : "")}>
-                          {isDay12 ? "🔒1-2" : "🔒"}
-                        </div>
-                      )}
-                      {!isLocked && isHoliday && (
-                        <div className="text-[9px] bg-white text-red-600 rounded px-0.5 mt-0.5 leading-tight font-bold">
-                          🇮🇩
-                        </div>
-                      )}
-                      {!isLocked && liburFull && (
-                        <div className="text-[9px] bg-red-500 rounded px-0.5 mt-0.5 leading-tight">
-                          🔒L
-                        </div>
-                      )}
-                      {!isLocked && clFull && !liburFull && (
-                        <div className="text-[9px] bg-orange-500 rounded px-0.5 mt-0.5 leading-tight">
-                          🔒C+L
-                        </div>
-                      )}
-                    </th>
-                  );
-                })}
+{days.map((day) => {
+                       const holidayName = isNationalHoliday(year, month, day);
+                       const isHoliday = !!holidayName;
+                       // Check if day 1-2 or admin-locked (for visual indicator)
+                       const isDay12 = day <= 2;
+                       const isAdminLockedNow = isAdminLocked(day, month, year, adminLockedDates);
+                       const isLocked = isDay12 || isAdminLockedNow;
+                       return (
+                         <th
+                           key={day}
+                           onClick={isAdmin && day > 2 ? () => toggleAdminLockedDate(day) : undefined}
+                           className={`px-1 py-2 text-center font-semibold min-w-[46px] border-r border-blue-600 ${
+                             isLocked 
+                               ? "bg-red-600 text-white" 
+                               : isHoliday
+                                 ? "bg-red-600 text-white"
+                                 : isWeekend(year, month, day) 
+                                   ? "bg-blue-900" 
+                                   : "bg-blue-700"
+                           } ${isAdmin && day > 2 ? "cursor-pointer hover:opacity-80" : ""}`}
+                           title={isAdmin && day > 2 ? (isAdminLockedNow ? "Klik untuk membuka kunci" : "Klik untuk mengunci") : (isHoliday ? holidayName : undefined)}
+                         >
+                           <div className="text-[10px] opacity-75">
+                             {getDayName(year, month, day)}
+                           </div>
+                           <div className="text-sm">{day}</div>
+                           {isLocked && (
+                             <div className="text-[9px] bg-white text-red-600 rounded px-0.5 mt-0.5 leading-tight font-bold" title={isDay12 ? "Tidak bisa edit" : (isAdminLockedNow ? "Dikunci admin" : "")}>
+                               {isDay12 ? "🔒1-2" : "🔒"}
+                             </div>
+                           )}
+                           {!isLocked && isHoliday && (
+                             <div className="text-[9px] bg-white text-red-600 rounded px-0.5 mt-0.5 leading-tight font-bold">
+                               🇮🇩
+                             </div>
+                           )}
+                         </th>
+                       );
+                     })}
                 <th className="px-2 py-3 text-center font-semibold min-w-[90px] bg-blue-800 border-r border-blue-600 text-xs">
                   Rekap
                 </th>
@@ -1332,68 +1235,62 @@ const isAdminLockedDay = (day: number, month: number, year: number, adminLocked:
                       </div>
                     </td>
 
-                    {/* Day cells */}
-                    {days.map((day) => {
-                      const val = schedule[emp.nik]?.[day] || "";
-                      const lockedForLibur = isDayLockedForLibur(emp.nik, day);
-                      const lockedForCL = isDayLockedForCL(emp.nik, day, "C");
-                      const weekend = isWeekend(year, month, day);
-                      const holidayName = isNationalHoliday(year, month, day);
-                      const isHoliday = !!holidayName;
-                      const today = new Date();
-                      const isPastDay23 = today.getDate() > 23;
-                      const editable = canEditCell(emp.nik, day);
-                      // Check if day 1-2 or admin-locked (for visual indicator)
-                      const isDay12 = day <= 2;
-                      const isAdminLocked = isAdminLockedDay(day, month, year, adminLockedDates);
-                      const isLocked = isDay12 || isAdminLocked;
+{/* Day cells */}
+                      {days.map((day) => {
+                        const val = schedule[emp.nik]?.[day] || "";
+                        const weekend = isWeekend(year, month, day);
+                        const holidayName = isNationalHoliday(year, month, day);
+                        const isHoliday = !!holidayName;
+                        const today = new Date();
+                        const isPastDay23 = today.getDate() > 23;
+                        const editable = canEditCell(emp.nik, day);
+                        // Check if day 1-2 or admin-locked (for visual indicator)
+                        const isDay12 = day <= 2;
+                        const isAdminLockedNow = isAdminLocked(day, month, year, adminLockedDates);
+                        const isLocked = isDay12 || isAdminLockedNow;
 
-                      return (
-                        <td
-                          key={day}
-                          className={`px-0.5 py-1 text-center border-r border-gray-100 ${
-                            isLocked 
-                              ? "bg-red-100" 
-                              : isHoliday
-                                ? "bg-red-50"
-                                : weekend 
-                                  ? "bg-orange-50" 
-                                  : ""
-                          } ${isPastDay23 ? "bg-gray-50" : ""}`}
-                        >
-                          <button
-                            onClick={() => handleCellClick(emp.nik, day)}
-                            disabled={!editable}
-                            className={`w-9 h-9 mx-auto rounded-lg flex items-center justify-center font-bold text-xs transition-all ${
-                              editable
-                                ? "hover:scale-110 hover:shadow-md cursor-pointer"
-                                : "cursor-not-allowed opacity-70"
-                            } ${
-                              val
-                                ? SHIFT_COLORS[val]
-                                : isPastDay23
-                                ? "bg-gray-200 text-gray-400 border-2 border-dashed border-gray-300"
-                                : "bg-gray-100 text-gray-400 hover:bg-gray-200"
-                            }`}
-                            title={
-                              !editable
-                                ? isPastDay23
-                                  ? "Tidak dapat edit setelah tanggal 23"
-                                  : `Login terlebih dahulu untuk mengedit`
-                                : lockedForLibur && !val
-                                ? `${emp.name} - ${day}: L terkunci (maks ${MAX_LIBUR_PER_DAY} orang)`
-                                : lockedForCL && !val
-                                ? `${emp.name} - ${day}: C+L terkunci (maks ${MAX_CL_PER_DAY} orang)`
-                                : isHoliday
-                                ? `${emp.name} - ${day}: ${holidayName} (Hari Libur Nasional)`
-                                : `${emp.name} - ${day}: ${SHIFT_LABELS[val] || "Kosong"} (klik untuk ubah)`
-                            }
-                          >
-                            {val || "·"}
-                          </button>
-                        </td>
-                      );
-                    })}
+                       return (
+                         <td
+                           key={day}
+                           className={`px-0.5 py-1 text-center border-r border-gray-100 ${
+                             isLocked 
+                               ? "bg-red-100" 
+                               : isHoliday
+                                 ? "bg-red-50"
+                                 : weekend 
+                                   ? "bg-orange-50" 
+                                   : ""
+                           } ${isPastDay23 ? "bg-gray-50" : ""}`}
+                         >
+                           <button
+                             onClick={() => handleCellClick(emp.nik, day)}
+                             disabled={!editable}
+                             className={`w-9 h-9 mx-auto rounded-lg flex items-center justify-center font-bold text-xs transition-all ${
+                               editable
+                                 ? "hover:scale-110 hover:shadow-md cursor-pointer"
+                                 : "cursor-not-allowed opacity-70"
+                             } ${
+                               val
+                                 ? SHIFT_COLORS[val]
+                                 : isPastDay23
+                                   ? "bg-gray-200 text-gray-400 border-2 border-dashed border-gray-300"
+                                   : "bg-gray-100 text-gray-400 hover:bg-gray-200"
+                             }`}
+                             title={
+                               !editable
+                                 ? isPastDay23
+                                   ? "Tidak dapat edit setelah tanggal 23"
+                                   : `Login terlebih dahulu untuk mengedit`
+                                 : isHoliday
+                                 ? `${emp.name} - ${day}: ${holidayName} (Hari Libur Nasional)`
+                                 : `${emp.name} - ${day}: ${SHIFT_LABELS[val] || "Kosong"} (klik untuk ubah)`
+                             }
+                           >
+                             {val || "·"}
+                           </button>
+                         </td>
+                       );
+                     })}
 
                     {/* Employee summary */}
                     <td className="px-2 py-1 text-center border-r border-gray-200">
@@ -1455,51 +1352,45 @@ const isAdminLockedDay = (day: number, month: number, year: number, adminLocked:
                 );
               })}
 
-              {/* Summary row per day */}
-              <tr className="bg-blue-50 border-t-2 border-blue-300 font-semibold">
-                <td className="sticky left-0 z-10 bg-blue-50 px-4 py-2 text-blue-800 border-r border-blue-200 text-xs">
-                  TOTAL / HARI
-                </td>
-                {days.map((day) => {
-                  const summary = getDaySummary(day);
-                  const liburFull = summary.L >= MAX_LIBUR_PER_DAY;
-                  const clTotal = (summary.C || 0) + (summary.L || 0);
-                  const clFull = clTotal >= MAX_CL_PER_DAY;
-                  return (
-                    <td
-                      key={day}
-                      className={`px-0.5 py-1 text-center border-r border-blue-100 ${clFull ? "bg-red-50" : ""}`}
-                    >
-                      <div className="flex flex-col gap-0.5 items-center">
-                        {summary.P > 0 && (
-                          <span className="text-[9px] bg-blue-500 text-white rounded px-1 leading-tight">P:{summary.P}</span>
-                        )}
-                        {summary.P0 > 0 && (
-                          <span className="text-[9px] bg-sky-400 text-white rounded px-1 leading-tight">P0:{summary.P0}</span>
-                        )}
-                        {summary.S > 0 && (
-                          <span className="text-[9px] bg-yellow-500 text-white rounded px-1 leading-tight">S:{summary.S}</span>
-                        )}
-                        {summary.M > 0 && (
-                          <span className="text-[9px] bg-purple-600 text-white rounded px-1 leading-tight">M:{summary.M}</span>
-                        )}
-                        {summary.L > 0 && (
-                          <span className={`text-[9px] rounded px-1 leading-tight ${liburFull ? "bg-red-600 text-white font-bold" : "bg-red-500 text-white"}`}>
-                            L:{summary.L}{liburFull ? "🔒" : ""}
-                          </span>
-                        )}
-                        {summary.C > 0 && (
-                          <span className={`text-[9px] rounded px-1 leading-tight ${clFull ? "bg-orange-600 text-white font-bold" : "bg-green-500 text-white"}`}>
-                            C:{summary.C}{clFull ? "🔒" : ""}
-                          </span>
-                        )}
-                        {clFull && (
-                          <span className="text-[8px] text-orange-700 font-bold leading-tight">C+L:{clTotal}🔒</span>
-                        )}
-                      </div>
-                    </td>
-                  );
-                })}
+{/* Summary row per day */}
+               <tr className="bg-blue-50 border-t-2 border-blue-300 font-semibold">
+                 <td className="sticky left-0 z-10 bg-blue-50 px-4 py-2 text-blue-800 border-r border-blue-200 text-xs">
+                   TOTAL / HARI
+                 </td>
+                 {days.map((day) => {
+                   const summary = getDaySummary(day);
+                   return (
+                     <td
+                       key={day}
+                       className="px-0.5 py-1 text-center border-r border-blue-100"
+                     >
+                       <div className="flex flex-col gap-0.5 items-center">
+                         {summary.P > 0 && (
+                           <span className="text-[9px] bg-blue-500 text-white rounded px-1 leading-tight">P:{summary.P}</span>
+                         )}
+                         {summary.P0 > 0 && (
+                           <span className="text-[9px] bg-sky-400 text-white rounded px-1 leading-tight">P0:{summary.P0}</span>
+                         )}
+                         {summary.S > 0 && (
+                           <span className="text-[9px] bg-yellow-500 text-white rounded px-1 leading-tight">S:{summary.S}</span>
+                         )}
+                         {summary.M > 0 && (
+                           <span className="text-[9px] bg-purple-600 text-white rounded px-1 leading-tight">M:{summary.M}</span>
+                         )}
+                         {summary.L > 0 && (
+                           <span className="text-[9px] bg-red-500 text-white rounded px-1 leading-tight">
+                             L:{summary.L}
+                           </span>
+                         )}
+                         {summary.C > 0 && (
+                           <span className="text-[9px] bg-green-500 text-white rounded px-1 leading-tight">
+                             C:{summary.C}
+                           </span>
+                         )}
+                       </div>
+                     </td>
+                   );
+                 })}
                 <td className="px-2 py-2 text-center text-blue-700 text-xs border-r border-blue-200">—</td>
                 <td className="px-2 py-2 text-center text-blue-700 text-xs border-r border-blue-200">📝</td>
                 <td className="px-2 py-2 text-center text-blue-700 text-xs">—</td>
@@ -1612,16 +1503,16 @@ const isAdminLockedDay = (day: number, month: number, year: number, adminLocked:
           </div>
         </div>
 
-        {/* Info box */}
-        <div className="mt-4 bg-yellow-50 border border-yellow-200 rounded-xl p-4 text-sm text-yellow-800">
-          <p className="font-semibold mb-1">ℹ️ Cara Penggunaan:</p>
-          <ul className="list-disc list-inside space-y-1 text-yellow-700">
-            <li>
-              Klik sel untuk mengubah shift: <strong>P → P0 → S → M → L → C → (kosong)</strong>
-            </li>
-            <li>
-              Libur (L) maks <strong>{MAX_LIBUR_PER_DAY} orang/hari</strong> • C+L gabungan maks <strong>{MAX_CL_PER_DAY} orang/hari</strong>
-            </li>
+{/* Info box */}
+         <div className="mt-4 bg-yellow-50 border border-yellow-200 rounded-xl p-4 text-sm text-yellow-800">
+           <p className="font-semibold mb-1">ℹ️ Cara Penggunaan:</p>
+           <ul className="list-disc list-inside space-y-1 text-yellow-700">
+             <li>
+               Klik sel untuk mengubah shift: <strong>P → P0 → S → M → L → C → (kosong)</strong>
+             </li>
+             <li>
+               <strong>L</strong> = Libur, <strong>C</strong> = Cuti (tanpa batasan jumlah)
+             </li>
             <li>
               <strong>Login Admin</strong> (👑) untuk mengedit semua baris, tambah/hapus karyawan, dan upload CSV.
             </li>
