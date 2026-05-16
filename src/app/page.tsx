@@ -49,6 +49,11 @@ const INITIAL_EMPLOYEES: Employee[] = [];
  const ADMIN_NIK = "ADMIN";
  const ADMIN_PASSWORD = "admin123";
 
+ // Max employees that can have "L" (Libur) on the same day
+ const MAX_LIBUR_PER_DAY = 5;
+ // Max employees that can have "C" or "L" combined on the same day
+ const MAX_CL_PER_DAY = 6;
+
 function getDaysInMonth(year: number, month: number) {
   return new Date(year, month + 1, 0).getDate();
 }
@@ -412,15 +417,70 @@ export default function Home() {
      [loggedInAs, isAdmin, year, month, adminLockedDates]
    );
 
+   // A cell is locked for "L" if the day already has MAX_LIBUR_PER_DAY employees with L
+   const isDayLockedForLibur = useCallback(
+     (nik: string, day: number) => {
+       const currentVal = schedule[nik]?.[day] || "";
+       if (currentVal === "L") return false;
+       return getLiburCountForDay(day) >= MAX_LIBUR_PER_DAY;
+     },
+     [schedule, getLiburCountForDay]
+   );
+
+   // A cell is locked for "C" if the day already has MAX_CL_PER_DAY employees with C or L
+   const isDayLockedForCL = useCallback(
+     (nik: string, day: number, nextShift: string) => {
+       if (nextShift !== "C" && nextShift !== "L") return false;
+       const currentVal = schedule[nik]?.[day] || "";
+       // If already C or L, not locked (can still change)
+       if (currentVal === "C" || currentVal === "L") return false;
+       return getCLCountForDay(day) >= MAX_CL_PER_DAY;
+     },
+     [schedule, getCLCountForDay]
+   );
+
    const handleCellClick = useCallback(
      async (nik: string, day: number) => {
        if (!canEditCell(nik, day)) return;
 
        const currentVal = schedule[nik]?.[day] || "";
        const currentIndex = SHIFT_OPTIONS.indexOf(currentVal);
-       const newIndex = (currentIndex + 1) % SHIFT_OPTIONS.length;
-       const newShift = SHIFT_OPTIONS[newIndex];
-       
+       let nextIndex = (currentIndex + 1) % SHIFT_OPTIONS.length;
+
+       const dayLiburCount = getLiburCountForDay(day);
+       const dayCLCount = getCLCountForDay(day);
+
+       let attempts = 0;
+
+       while (attempts < SHIFT_OPTIONS.length) {
+         const candidate = SHIFT_OPTIONS[nextIndex];
+         let skip = false;
+
+         // Skip "L" if day is already at max libur (and current is not L)
+         if (
+           candidate === "L" &&
+           dayLiburCount >= MAX_LIBUR_PER_DAY &&
+           currentVal !== "L"
+         ) {
+           skip = true;
+         }
+
+         // Skip "C" or "L" if day is already at max C+L combined (and current is not C/L)
+         if (
+           (candidate === "C" || candidate === "L") &&
+           dayCLCount >= MAX_CL_PER_DAY &&
+           currentVal !== "C" &&
+           currentVal !== "L"
+         ) {
+           skip = true;
+         }
+
+         if (!skip) break;
+         nextIndex = (nextIndex + 1) % SHIFT_OPTIONS.length;
+         attempts++;
+       }
+
+       const newShift = SHIFT_OPTIONS[nextIndex];
        setPendingSaves((prev) => prev + 1);
        
        // Update local state immediately for better UX
@@ -429,7 +489,7 @@ export default function Home() {
          [monthKey]: {
            ...(prev[monthKey] || {}),
            [nik]: {
-             ...(prev[monthKey]?.[nik] || {}),
+             ...((prev[monthKey] || {})[nik] || {}),
              [day]: newShift,
            },
          },
@@ -457,7 +517,7 @@ export default function Home() {
          setPendingSaves((prev) => Math.max(0, prev - 1));
        }
      },
-     [schedule, canEditCell, monthKey, year, month]
+     [schedule, getLiburCountForDay, getCLCountForDay, canEditCell, monthKey, year, month]
    );
 
   const handleAddEmployee = async () => {
@@ -976,7 +1036,7 @@ export default function Home() {
                 📅 Jadwal Kerja Karyawan
               </h1>
 <p className="text-blue-200 text-sm mt-0.5">
-                 Klik sel untuk mengubah shift • L = Libur • C = Cuti
+                 Klik sel untuk mengubah shift • L maks {MAX_LIBUR_PER_DAY}/hari • C+L maks {MAX_CL_PER_DAY}/hari
                </p>
 <p className="text-yellow-300 text-sm mt-1 font-semibold">
                  ⚠️ Batas input request jadwal: tanggal 23 setiap bulan
@@ -1133,12 +1193,16 @@ export default function Home() {
                   Karyawan
                 </th>
 {days.map((day) => {
-                       const holidayName = isNationalHoliday(year, month, day);
-                       const isHoliday = !!holidayName;
+                       const liburCount = getLiburCountForDay(day);
+                       const clCount = getCLCountForDay(day);
+                       const liburFull = liburCount >= MAX_LIBUR_PER_DAY;
+                       const clFull = clCount >= MAX_CL_PER_DAY;
                        // Check if day 1-2 or admin-locked (for visual indicator)
                        const isDay12 = day <= 2;
                        const isAdminLockedNow = isAdminLocked(day, month, year, adminLockedDates);
                        const isLocked = isDay12 || isAdminLockedNow;
+                       const holidayName = isNationalHoliday(year, month, day);
+                       const isHoliday = !!holidayName;
                        return (
                          <th
                            key={day}
@@ -1166,6 +1230,16 @@ export default function Home() {
                            {!isLocked && isHoliday && (
                              <div className="text-[9px] bg-white text-red-600 rounded px-0.5 mt-0.5 leading-tight font-bold">
                                🇮🇩
+                             </div>
+                           )}
+                           {!isLocked && liburFull && (
+                             <div className="text-[9px] bg-red-500 rounded px-0.5 mt-0.5 leading-tight">
+                               🔒L
+                             </div>
+                           )}
+                           {!isLocked && clFull && !liburFull && (
+                             <div className="text-[9px] bg-orange-500 rounded px-0.5 mt-0.5 leading-tight">
+                               🔒C+L
                              </div>
                            )}
                          </th>
@@ -1236,61 +1310,67 @@ export default function Home() {
                     </td>
 
 {/* Day cells */}
-                      {days.map((day) => {
-                        const val = schedule[emp.nik]?.[day] || "";
-                        const weekend = isWeekend(year, month, day);
-                        const holidayName = isNationalHoliday(year, month, day);
-                        const isHoliday = !!holidayName;
-                        const today = new Date();
-                        const isPastDay23 = today.getDate() > 23;
-                        const editable = canEditCell(emp.nik, day);
-                        // Check if day 1-2 or admin-locked (for visual indicator)
-                        const isDay12 = day <= 2;
-                        const isAdminLockedNow = isAdminLocked(day, month, year, adminLockedDates);
-                        const isLocked = isDay12 || isAdminLockedNow;
+                       {days.map((day) => {
+                         const val = schedule[emp.nik]?.[day] || "";
+                         const lockedForLibur = isDayLockedForLibur(emp.nik, day);
+                         const lockedForCL = isDayLockedForCL(emp.nik, day, "C");
+                         const weekend = isWeekend(year, month, day);
+                         const holidayName = isNationalHoliday(year, month, day);
+                         const isHoliday = !!holidayName;
+                         const today = new Date();
+                         const isPastDay23 = today.getDate() > 23;
+                         const editable = canEditCell(emp.nik, day);
+                         // Check if day 1-2 or admin-locked (for visual indicator)
+                         const isDay12 = day <= 2;
+                         const isAdminLockedNow = isAdminLocked(day, month, year, adminLockedDates);
+                         const isLocked = isDay12 || isAdminLockedNow;
 
-                       return (
-                         <td
-                           key={day}
-                           className={`px-0.5 py-1 text-center border-r border-gray-100 ${
-                             isLocked 
-                               ? "bg-red-100" 
-                               : isHoliday
-                                 ? "bg-red-50"
-                                 : weekend 
-                                   ? "bg-orange-50" 
-                                   : ""
-                           } ${isPastDay23 ? "bg-gray-50" : ""}`}
-                         >
-                           <button
-                             onClick={() => handleCellClick(emp.nik, day)}
-                             disabled={!editable}
-                             className={`w-9 h-9 mx-auto rounded-lg flex items-center justify-center font-bold text-xs transition-all ${
-                               editable
-                                 ? "hover:scale-110 hover:shadow-md cursor-pointer"
-                                 : "cursor-not-allowed opacity-70"
-                             } ${
-                               val
-                                 ? SHIFT_COLORS[val]
-                                 : isPastDay23
-                                   ? "bg-gray-200 text-gray-400 border-2 border-dashed border-gray-300"
-                                   : "bg-gray-100 text-gray-400 hover:bg-gray-200"
-                             }`}
-                             title={
-                               !editable
-                                 ? isPastDay23
-                                   ? "Tidak dapat edit setelah tanggal 23"
-                                   : `Login terlebih dahulu untuk mengedit`
-                                 : isHoliday
-                                 ? `${emp.name} - ${day}: ${holidayName} (Hari Libur Nasional)`
-                                 : `${emp.name} - ${day}: ${SHIFT_LABELS[val] || "Kosong"} (klik untuk ubah)`
-                             }
-                           >
-                             {val || "·"}
-                           </button>
-                         </td>
-                       );
-                     })}
+                        return (
+                          <td
+                            key={day}
+                            className={`px-0.5 py-1 text-center border-r border-gray-100 ${
+                              isLocked 
+                                ? "bg-red-100" 
+                                : isHoliday
+                                  ? "bg-red-50"
+                                  : weekend 
+                                    ? "bg-orange-50" 
+                                    : ""
+                            } ${isPastDay23 ? "bg-gray-50" : ""}`}
+                          >
+                            <button
+                              onClick={() => handleCellClick(emp.nik, day)}
+                              disabled={!editable}
+                              className={`w-9 h-9 mx-auto rounded-lg flex items-center justify-center font-bold text-xs transition-all ${
+                                editable
+                                  ? "hover:scale-110 hover:shadow-md cursor-pointer"
+                                  : "cursor-not-allowed opacity-70"
+                              } ${
+                                val
+                                  ? SHIFT_COLORS[val]
+                                  : isPastDay23
+                                    ? "bg-gray-200 text-gray-400 border-2 border-dashed border-gray-300"
+                                    : "bg-gray-100 text-gray-400 hover:bg-gray-200"
+                              }`}
+                              title={
+                                !editable
+                                  ? isPastDay23
+                                    ? "Tidak dapat edit setelah tanggal 23"
+                                    : `Login terlebih dahulu untuk mengedit`
+                                  : lockedForLibur && !val
+                                    ? `${emp.name} - ${day}: L terkunci (maks ${MAX_LIBUR_PER_DAY} orang)`
+                                    : lockedForCL && !val
+                                    ? `${emp.name} - ${day}: C+L terkunci (maks ${MAX_CL_PER_DAY} orang)`
+                                    : isHoliday
+                                    ? `${emp.name} - ${day}: ${holidayName} (Hari Libur Nasional)`
+                                    : `${emp.name} - ${day}: ${SHIFT_LABELS[val] || "Kosong"} (klik untuk ubah)`
+                              }
+                            >
+                              {val || "·"}
+                            </button>
+                          </td>
+                        );
+                      })}
 
                     {/* Employee summary */}
                     <td className="px-2 py-1 text-center border-r border-gray-200">
@@ -1359,10 +1439,13 @@ export default function Home() {
                  </td>
                  {days.map((day) => {
                    const summary = getDaySummary(day);
+                   const liburFull = summary.L >= MAX_LIBUR_PER_DAY;
+                   const clTotal = (summary.C || 0) + (summary.L || 0);
+                   const clFull = clTotal >= MAX_CL_PER_DAY;
                    return (
                      <td
                        key={day}
-                       className="px-0.5 py-1 text-center border-r border-blue-100"
+                       className={`px-0.5 py-1 text-center border-r border-blue-100 ${clFull ? "bg-red-50" : ""}`}
                      >
                        <div className="flex flex-col gap-0.5 items-center">
                          {summary.P > 0 && (
@@ -1378,14 +1461,17 @@ export default function Home() {
                            <span className="text-[9px] bg-purple-600 text-white rounded px-1 leading-tight">M:{summary.M}</span>
                          )}
                          {summary.L > 0 && (
-                           <span className="text-[9px] bg-red-500 text-white rounded px-1 leading-tight">
-                             L:{summary.L}
+                           <span className={`text-[9px] rounded px-1 leading-tight ${liburFull ? "bg-red-600 text-white font-bold" : "bg-red-500 text-white"}`}>
+                             L:{summary.L}{liburFull ? "🔒" : ""}
                            </span>
                          )}
                          {summary.C > 0 && (
-                           <span className="text-[9px] bg-green-500 text-white rounded px-1 leading-tight">
-                             C:{summary.C}
+                           <span className={`text-[9px] rounded px-1 leading-tight ${clFull ? "bg-orange-600 text-white font-bold" : "bg-green-500 text-white"}`}>
+                             C:{summary.C}{clFull ? "🔒" : ""}
                            </span>
+                         )}
+                         {clFull && (
+                           <span className="text-[8px] text-orange-700 font-bold leading-tight">C+L:{clTotal}🔒</span>
                          )}
                        </div>
                      </td>
